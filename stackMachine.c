@@ -66,6 +66,7 @@ void fatal(const char *format, ... ){
      printf("FATAL : ");
      vprintf(format,args);
      va_end(args);
+     exit(1);
 }
 
 void *buff_grow(const void *buff, size_t new_len, size_t elem_size ){
@@ -98,6 +99,50 @@ void buff_test(void){
 }
 const char *str_intern_range( const char *start, const char *end);
 
+// String Interning begins here.....
+
+typedef struct InternStr {
+     size_t len;
+     const char *str;
+} InternStr;
+
+InternStr *intern;
+
+const char *str_intern_range( const char *start, const char *end){
+     size_t len = end - start;
+     int i;
+     for ( i = 0; i < buff_len(intern) ; i++ ){
+          if ( (intern[i].len == len) && ( strncmp(intern[i].str,start,len) == 0 ) )
+               return intern[i].str;
+     }
+
+     char *string = xmalloc(len+1);
+     memcpy(string,start,len);
+     string[len] = 0;
+     InternStr newIntern = {len,string};
+
+     buff_push(intern,newIntern );
+     return string;
+
+
+     
+}
+
+const char *str_intern( char *start ){
+     return str_intern_range( start, start + strlen(start) ) ;
+}
+
+void str_intern_test(void){
+     char x[] = "hello";
+     char y[] = "hello";
+     char z[] = "hellozz";
+     assert(x!=y);
+     const char *px = str_intern(x);
+     const char *py = str_intern(y);
+     const char *pz = str_intern(z);
+     assert(px == py);
+     assert( px != pz );
+}
 
 char *stream;
 Token token;
@@ -182,7 +227,15 @@ void next_token(void){
                     stream++;
                token.name = str_intern_range(token.start,stream); 
                break;
-
+          case '\\':
+               *stream++;
+               switch ( *stream ){
+                    case 'n':
+                         token.kind = '\n';
+                         break;
+               }
+               *stream++;
+               break;
           default:
                token.kind = *stream++;
                break;
@@ -241,6 +294,137 @@ bool expect_token(TokenKind kind){
           return false;
      }
 }
+
+
+// Parsing Stack Macine bytecode begins here
+/* The grammar is as.. .
+ *   expr = Action Value '\n'
+ *   Action = 'LIT'|'ADD'|'SUB'|'MUL'|'DIV'|'LSHIFT'|'RSHIFR'|'POW'
+ *   Value = INT
+ *   
+ */
+typedef enum {
+     LIT = 1,
+     ADD,
+     SUB,
+     MUL,
+     DIV,
+     HALT
+} opcode;
+
+typedef struct stack {
+     size_t len;
+     int val[1024];
+
+} stack;
+
+#define stack_pointer(x) ((stack *)( (char *)base- offsetof(stack,val) ))
+#define stack_len(x) (  stack_pointer(x)->len )
+#define stack_fits(top,x) ( (stack_len(top) + (x) ) <= 1024)
+#define push(x) ( (stack_fits(top,1))?\
+          (*(top++) = (x),stack_pointer(top)->len++ ):\
+          fatal("Stack Overflow\n") ) 
+
+#define pops(x) ( ( stack_len(base) - (x) ) >= 0 )
+#define pop()   ( stack_pointer(base)->len--, *(--top))
+void smachine_init(char *str){
+     stream = str;
+     next_token();
+     
+}
+const char *lit;
+const char *add;
+const char *sub;
+const char *mul;
+const char *divide;
+const char *halt;
+void smachine_str_intern_init(void){
+     lit = str_intern("LIT");
+     add = str_intern("ADD");
+     sub = str_intern("SUB");
+     mul = str_intern("MUL");
+     divide = str_intern("DIV");
+     halt = str_intern("HALT");
+}
+
+
+opcode get_opcode( const char *name ){
+
+     if ( name == lit ){
+          return LIT;
+     } else if ( name == add ){
+          return ADD;
+     }else if ( name == sub ){
+          return SUB;
+     }else if ( name == mul ){
+          return MUL;
+     }else if ( name == divide ){
+          return DIV;
+     }else if ( name == halt){
+          return HALT;
+     }else {
+          fatal("Invalid command %s.\n",name);
+          return 0;
+     }
+
+}
+
+stack machine_stack;
+const int *base = &machine_stack.val[0];
+int *top = &machine_stack.val[0];
+
+
+void parse_smachine_expr(void){
+     opcode op = get_opcode(token.name);
+     next_token(); 
+     switch ( op ){
+          case LIT: 
+               expect_token(' ');
+               if ( is_token(TOKEN_INT) ){
+                    push(token.val);
+                    next_token();
+               } else {
+                    fatal("Expected 'int' but got '%c' instead ", token.kind );
+               }     
+               expect_token('\n');
+               parse_smachine_expr();      
+               break;
+          case SUB:
+          case ADD:
+               if ( !pops(2) ){
+                    push(0);
+               }
+               int rval = pop();
+               int lval = pop();
+               if ( op == ADD ){
+                    push (lval+rval);
+               }else{
+                    assert( op == SUB );
+                    push( lval - rval );
+               }
+               expect_token('\n');
+               parse_smachine_expr();
+               break;
+          case HALT:
+               printf("Program halted by instruction\n");
+               break;
+          default: 
+               fatal("Exprected opcode but got crap instead");
+               break;
+
+     }
+}
+
+void parse_smachine( ){
+     parse_smachine_expr();
+}
+
+void smachine_test(void){
+     smachine_str_intern_init();
+     smachine_init("LIT 1\nLIT 2\nADD\nLIT 1\nSUB\nHALT\n"); 
+     parse_smachine();
+}
+
 
 // Parsing simple expressions using recursive descent
 //
@@ -373,50 +557,6 @@ void expr_test(void){
 }
 #undef TOKEN_TEST
 
-// String Interning begins here.....
-
-typedef struct InternStr {
-     size_t len;
-     const char *str;
-} InternStr;
-
-InternStr *intern;
-
-const char *str_intern_range( const char *start, const char *end){
-     size_t len = end - start;
-     int i;
-     for ( i = 0; i < buff_len(intern) ; i++ ){
-          if ( (intern[i].len == len) && ( strncmp(intern[i].str,start,len) == 0 ) )
-               return intern[i].str;
-     }
-
-     char *string = xmalloc(len+1);
-     memcpy(string,start,len);
-     string[len] = 0;
-     InternStr newIntern = {len,string};
-
-     buff_push(intern,newIntern );
-     return string;
-
-
-     
-}
-
-const char *str_intern( char *start ){
-     return str_intern_range( start, start + strlen(start) ) ;
-}
-
-void str_intern_test(void){
-     char x[] = "hello";
-     char y[] = "hello";
-     char z[] = "hellozz";
-     assert(x!=y);
-     const char *px = str_intern(x);
-     const char *py = str_intern(y);
-     const char *pz = str_intern(z);
-     assert(px == py);
-     assert( px != pz );
-}
 
 void print_token( Token tkn ){
      switch ( tkn.kind ){
@@ -447,5 +587,6 @@ int main(void){
    //  lex_test();
    //  str_intern_test();
      expr_test();
+     smachine_test();
      return 0;
 }
