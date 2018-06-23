@@ -1,12 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
-//#include <stdint.h>
 #include <stddef.h>
 #include <ctype.h>
 #include <string.h>
 #include <assert.h>
 #include <stdbool.h>
 #include <stdarg.h>
+#include <stdint.h>
 
 #define MAX(x,y) ( ( ( x ) < ( y ) )?( y ):( x ) )
 #define isOdd(x) (  ( x) & 01 )
@@ -309,6 +309,7 @@ typedef enum {
      SUB,
      MUL,
      DIV,
+     MOD,
      LSHIFT,
      RSHIFT,
      BAND,
@@ -412,60 +413,70 @@ opcode get_opcode( const char *name ){
 }
 
 
-void parse_smachine_expr(int *s){
-     opcode op = get_opcode(token.name);
-     next_token(); 
-     switch ( op ){
-          case LIT: 
-               expect_token(' ');
-               if ( is_token(TOKEN_INT) ){
-                    int val = token.val;
-                    push(s,val);
-                    next_token();
-               } else {
-                    fatal("Expected 'int' but got '%c' instead ", token.kind );
-               }     
-               expect_token('\n');
-               parse_smachine_expr(s);      
-               break;
-          case SUB:
-          case ADD:
-               if ( pops(s,2) ){
-                    push(s,0);
-               }
-               int rval = pop(s);
-               int lval = pop(s);
-               if ( op == ADD ){
-                    push(s,lval+rval);
-               }else{
-                    assert( op == SUB );
-                    push( s,lval - rval );
-               }
-               expect_token('\n');
-               parse_smachine_expr(s);
-               break;
-          case HALT:
-               printf("Program halted by instruction\n");
-               break;
-          default: 
-               fatal("Exprected opcode but got crap instead");
-               break;
-
+int32_t parse_smachine_expr(const unsigned char *bytecodes){
+     int *val_stack;
+     int lval, rval;
+     enum { STACK_MAX = 1024 };
+     val_stack = stack_init(val_stack,STACK_MAX,sizeof(int ));
+     while ( 1 ) {
+          unsigned char op = *bytecodes++;
+          switch ( op ){
+               case LIT:
+                    ;
+                    push(val_stack, *(unsigned int *)bytecodes); 
+                    bytecodes += sizeof( unsigned int);
+                    break;
+               case SUB:
+                    ;
+                    rval = pop(val_stack);
+                    lval = pop(val_stack);
+                    push(val_stack,lval-rval);
+                    break;
+               case ADD:
+                    ;
+                    rval = pop(val_stack);
+                    lval = pop(val_stack);
+                    push(val_stack,lval+rval);
+                    break;
+               case MUL:
+                    ;
+                    rval = pop(val_stack);
+                    lval = pop(val_stack);
+                    push(val_stack,lval*rval);
+                    break;
+               case DIV:
+                    ;
+                    rval = pop(val_stack);
+                    lval = pop(val_stack);
+                    push(val_stack,lval/rval);
+                    break;
+               case HALT:
+                    ;
+                    printf("Program halted by instruction\n");
+                    int val = pop(val_stack);
+                    stack_free(val_stack);
+                    return val;
+                    break;
+               default:
+                   ; 
+                    fatal("Exprected opcode but got crap instead");
+                    break;
+     
+          }
      }
 } 
 
 
-void parse_smachine( ){
-     int *val_stack;
-     enum { STACK_MAX = 1024 };
-     val_stack = stack_init(val_stack,STACK_MAX,sizeof(int));
-     parse_smachine_expr(val_stack);
+void parse_smachine(const char *codes ){
+     int val = parse_smachine_expr(codes);
+     printf("%d\n",val);
 }
 
 void smachine_test(void){
-     smachine_str_intern_init();
-     smachine_init("LIT 1\nLIT 2\nADD\nLIT 1\nSUB\nHALT\n"); 
-     parse_smachine();
+//     smachine_str_intern_init();
+//     smachine_init("LIT 1\2\nADD\nLIT 1\nSUB\nHALT\n"); 
+     const char codes[] = { LIT,4,0,0,0,LIT,1,0,0,0,ADD,HALT};
+     parse_smachine(codes);
 }
 
 
