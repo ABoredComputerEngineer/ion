@@ -309,28 +309,70 @@ typedef enum {
      SUB,
      MUL,
      DIV,
+     LSHIFT,
+     RSHIFT,
+     BAND,
+     BOR,
+     COMP,
+     NEG,
      HALT
 } opcode;
 
 typedef struct stack {
      size_t len;
-     int val[1024];
-
+     size_t cap;
+     char buff[0];
 } stack;
 
-#define stack_pointer(x) ((stack *)( (char *)base- offsetof(stack,val) ))
-#define stack_len(x) (  stack_pointer(x)->len )
-#define stack_fits(top,x) ( (stack_len(top) + (x) ) <= 1024)
-#define push(x) ( (stack_fits(top,1))?\
-          (*(top++) = (x),stack_pointer(top)->len++ ):\
-          fatal("Stack Overflow\n") ) 
-
-#define pops(x) ( ( stack_len(base) - (x) ) >= 0 )
-#define pop()   ( stack_pointer(base)->len--, *(--top))
 void smachine_init(char *str){
      stream = str;
      next_token();
      
+}
+#define sp(s) ( (stack *)( (char *)( s ) - offsetof(stack,buff) ))
+#define stack_len(s) ( sp(s)->len )
+#define stack_cap(s) ( sp(s)->cap )
+#define p_top(s) ( (( s ) + ( stack_len(s) - 1 )) )
+#define top(s) ( *(p_top(s) ) )
+#define stack_fits(s,n) ( ( stack_len(s) + ( n ) ) <= stack_cap(s) )
+#define pops(s,n) ( ( stack_len(s)  > 0) )
+#define push(s,v) ( (stack_fits(s,1))?((*(p_top(s)+1)) = (v) , sp(s)->len++):(fatal("Stack Overflow\n"),1) )
+#define pop(s) ( (pops(s,1))?((--sp(s)->len) , *( ( s )+ stack_len(s))):(fatal("trying to pop from empty stack\n"),0) ) 
+#define stack_free(s) ( free( sp(s) ), s = NULL )
+
+void *stack_init(void *sp, size_t stack_len, size_t elem_size){
+     size_t size = offsetof(stack,buff) + stack_len*elem_size;
+     assert( size > 0 );
+     stack *new = xmalloc(size);
+     assert( new != NULL );
+     new->cap = stack_len;
+     new->len = 0;
+     return new->buff;
+}
+
+
+void stack_test(int *tst_stack){
+     enum { STACK_MAX = 1024 };
+     tst_stack = stack_init(tst_stack,STACK_MAX,sizeof(int));
+     int i = 0;
+     
+     while ( stack_fits(tst_stack,1) ){
+          push(tst_stack,i++);
+     }
+     assert( top(tst_stack) == STACK_MAX - 1 );
+     int len = stack_len(tst_stack) ;
+     int temp;
+     assert( len == STACK_MAX );
+      
+     while ( pops(tst_stack,1) ){
+          printf("top: %d\t p_value: ",top(tst_stack) );
+          len = stack_len(tst_stack);
+          temp = pop(tst_stack);
+         printf("%d\t\n",temp);
+     }
+     putchar('\n');
+     stack_free(tst_stack);
+     assert(tst_stack == NULL );
 }
 const char *lit;
 const char *add;
@@ -369,41 +411,38 @@ opcode get_opcode( const char *name ){
 
 }
 
-stack machine_stack;
-const int *base = &machine_stack.val[0];
-int *top = &machine_stack.val[0];
 
-
-void parse_smachine_expr(void){
+void parse_smachine_expr(int *s){
      opcode op = get_opcode(token.name);
      next_token(); 
      switch ( op ){
           case LIT: 
                expect_token(' ');
                if ( is_token(TOKEN_INT) ){
-                    push(token.val);
+                    int val = token.val;
+                    push(s,val);
                     next_token();
                } else {
                     fatal("Expected 'int' but got '%c' instead ", token.kind );
                }     
                expect_token('\n');
-               parse_smachine_expr();      
+               parse_smachine_expr(s);      
                break;
           case SUB:
           case ADD:
-               if ( !pops(2) ){
-                    push(0);
+               if ( pops(s,2) ){
+                    push(s,0);
                }
-               int rval = pop();
-               int lval = pop();
+               int rval = pop(s);
+               int lval = pop(s);
                if ( op == ADD ){
-                    push (lval+rval);
+                    push(s,lval+rval);
                }else{
                     assert( op == SUB );
-                    push( lval - rval );
+                    push( s,lval - rval );
                }
                expect_token('\n');
-               parse_smachine_expr();
+               parse_smachine_expr(s);
                break;
           case HALT:
                printf("Program halted by instruction\n");
@@ -413,10 +452,14 @@ void parse_smachine_expr(void){
                break;
 
      }
-}
+} 
+
 
 void parse_smachine( ){
-     parse_smachine_expr();
+     int *val_stack;
+     enum { STACK_MAX = 1024 };
+     val_stack = stack_init(val_stack,STACK_MAX,sizeof(int));
+     parse_smachine_expr(val_stack);
 }
 
 void smachine_test(void){
@@ -586,7 +629,9 @@ int main(void){
    //  buff_test();
    //  lex_test();
    //  str_intern_test();
+     int *zz;
      expr_test();
+     stack_test(zz);
      smachine_test();
      return 0;
 }
