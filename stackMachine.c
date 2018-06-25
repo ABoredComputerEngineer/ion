@@ -114,6 +114,12 @@ int power( int x, int n){
      assert(n>=0);
      return power_iter(x,n,1) ;
 }
+
+
+// returns 1 byte ( 8 bits ) from the given bit position p, rightmost bit position is 0
+uint8_t getbyte( uint32_t x, int p){
+     return ( x >> (  p - 8 + 1 ) ) & ~(~0 << 8 ) ;
+}
 const char *str_intern_range( const char *start, const char *end);
 
 // String Interning begins here.....
@@ -333,6 +339,7 @@ typedef enum {
      BOR,
      COMP,
      NEG,
+     POW,
      HALT
 } opcode;
 
@@ -518,7 +525,7 @@ void smachine_test(void){
      uint8_t c1[] = { LIT,4,0,0,0,LIT,1,0,0,0,ADD,HALT};
      uint8_t c2[] = { LIT,16,2,0,0,HALT };
      uint8_t c3[] = { LIT, 7,0,0,0,LIT,8,0,0,0,MUL,LIT,3,0,0,0,SUB,HALT };
-     uint8_t c4[] = { LIT, 7,0,0,0 };
+     uint8_t c4[] = { LIT, 7,0,0,0, HALT };
      assert( parse_smachine(c1) == 5 );
      printf("%d\n",parse_smachine(c2) );
      assert( parse_smachine(c3) == ( 7 * 8 ) - 3 );
@@ -540,82 +547,86 @@ void smachine_test(void){
     expr4 = INT | '(' expr ')' 
  */
 
+uint8_t *codes;
 
 
-int parse_expr(void);
-int parse_expr0(void);
-int parse_expr1(void);
-int parse_expr2(void);
-int parse_expr3(void);
-int parse_expr4(void);
+void  parse_expr(void);
+void  parse_expr0(void);
+void  parse_expr1(void);
+void  parse_expr2(void);
+void  parse_expr3(void);
+void  parse_expr4(void);
 
-int parse_expr(void){
-     return parse_expr0();
+void  parse_expr(void){
+     parse_expr0();
+     
 }
 
-int parse_expr0(void){
-     int val = parse_expr1();
+void parse_expr0(void){
+     parse_expr1();
      while ( is_token('+') || is_token('-' ) ){
           char op = token.kind;
           next_token();
-          int rval = parse_expr1();
+          parse_expr1();
           if ( op == '+' ){
-              val += rval; 
+               push(codes,ADD);
+               //....
           } else {
-               assert( op == '-' );
-               val -= rval;
+               push(codes,SUB);
+               //...
           }
      }
-     return val;
 }
 
-int parse_expr1(void){
-     int val = parse_expr2();
+void parse_expr1(void){
+     parse_expr2();
      while ( is_token('*') || is_token('/') ){
           char op = token.kind;
           next_token();
-          int rval = parse_expr2();
+          parse_expr2();
           if ( op == '*' ){
-               val *= rval;
+               push(codes,MUL);
+               //..
           }else {
-               assert( op == '/' );
-               assert( rval != 0 );
-               val /= rval;
+               push(codes,DIV);
+               //..
           }
      }
-     return val;
 }
 
-int parse_expr2(void){
-     int val = parse_expr3();
+void parse_expr2(void){
+     parse_expr3();
      while ( match_token('^') ){
-         int rval = parse_expr2();
-         val = power(val,rval); 
+         parse_expr2();
+         push(codes,POW);
+         //..
      }
-     return val;
 }
 
-int parse_expr3(void){
+void parse_expr3(void){
      if ( match_token('-') ){
-          return -parse_expr3();
+          push(codes,NEG);
+          //.. 
      } else {
-          return parse_expr4();
+          //..
+          parse_expr4();
      }
 }
 
-int parse_expr4(void){
+void parse_expr4(void){
      if ( is_token(TOKEN_INT) ){
           int val = token.val;
+          push(codes,LIT); 
+          for ( int i = 7; i < 32 ; i+=8 )
+               push(codes,getbyte(val,i));
           next_token();
-          return val;
      } else {
           if ( is_token('(') ){
                next_token();
-               return parse_expr();
+               parse_expr();
           }
           expect_token(')');
      }
-     return token.kind;
 }
 
 void init_stream( char *str){
@@ -625,7 +636,8 @@ void init_stream( char *str){
 
 int parse_expr_test(char *str){
      init_stream(str);
-     return  parse_expr();
+     parse_expr();
+     push(codes,HALT);
 }
 
 #define TOKEN_TEST(x) ( parse_expr_test(#x) == (x) )
@@ -643,6 +655,13 @@ void expr_test(void){
        assert( parse_expr_test("3^3") == 27 );
 }
 #undef TOKEN_TEST
+
+void get_bytecode( void ){
+     enum { MAX_STACK = 1024 };
+     codes = stack_init(codes,MAX_STACK,sizeof(uint8_t) );
+     parse_expr_test("2*(3+4)");
+     printf("%d\n",parse_smachine(codes) );
+}
 
 
 void print_token( Token tkn ){
@@ -674,8 +693,9 @@ int main(void){
    //  lex_test();
    //  str_intern_test();
      int *zz;
-     expr_test();
+//     expr_test();
      stack_test(zz);
      smachine_test();
+     get_bytecode();
      return 0;
 }
