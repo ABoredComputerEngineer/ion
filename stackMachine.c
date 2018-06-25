@@ -8,6 +8,7 @@
 #include <stdarg.h>
 #include <stdint.h>
 
+
 #define MAX(x,y) ( ( ( x ) < ( y ) )?( y ):( x ) )
 #define isOdd(x) (  ( x) & 01 )
 
@@ -96,6 +97,22 @@ void buff_test(void){
   //   putchar('\n'); 
      buff_free(xz);
      return;
+}
+
+// Custom Power function
+int power_iter( int x, int n , int a ){
+     if ( n == 0 ){
+          return a;
+     } else if ( !isOdd(n) ) {
+          return power_iter(x*x,n/2,a );
+     } else {
+          return power_iter(x,n-1,a*x);
+     }
+}
+
+int power( int x, int n){
+     assert(n>=0);
+     return power_iter(x,n,1) ;
 }
 const char *str_intern_range( const char *start, const char *end);
 
@@ -366,10 +383,8 @@ void stack_test(int *tst_stack){
      assert( len == STACK_MAX );
       
      while ( pops(tst_stack,1) ){
-          printf("top: %d\t p_value: ",top(tst_stack) );
           len = stack_len(tst_stack);
           temp = pop(tst_stack);
-         printf("%d\t\n",temp);
      }
      putchar('\n');
      stack_free(tst_stack);
@@ -413,52 +428,80 @@ opcode get_opcode( const char *name ){
 }
 
 
-int32_t parse_smachine_expr(const unsigned char *bytecodes){
-     int *val_stack;
-     int lval, rval;
+int32_t parse_smachine_expr(const uint8_t *bytecodes){
+     int32_t *val_stack;
+     int32_t lval, rval;
      enum { STACK_MAX = 1024 };
      val_stack = stack_init(val_stack,STACK_MAX,sizeof(int ));
      while ( 1 ) {
-          unsigned char op = *bytecodes++;
+          uint8_t op = *bytecodes++;
           switch ( op ){
                case LIT:
-                    ;
-                    push(val_stack, *(unsigned int *)bytecodes); 
-                    bytecodes += sizeof( unsigned int);
+                    push(val_stack, *(uint32_t *)bytecodes); 
+                    bytecodes += sizeof(uint32_t);
                     break;
                case SUB:
-                    ;
                     rval = pop(val_stack);
                     lval = pop(val_stack);
                     push(val_stack,lval-rval);
                     break;
                case ADD:
-                    ;
                     rval = pop(val_stack);
                     lval = pop(val_stack);
                     push(val_stack,lval+rval);
                     break;
                case MUL:
-                    ;
                     rval = pop(val_stack);
                     lval = pop(val_stack);
                     push(val_stack,lval*rval);
                     break;
                case DIV:
-                    ;
                     rval = pop(val_stack);
                     lval = pop(val_stack);
+                    assert(rval!=0);
                     push(val_stack,lval/rval);
+                    break;
+               case MOD:
+                    rval = pop(val_stack);
+                    lval = pop(val_stack);
+                    assert(rval!=0);
+                    push(val_stack,lval%rval);
+                    break;
+               case LSHIFT:
+                    rval = pop(val_stack);
+                    lval = pop(val_stack);
+                    push(val_stack,lval<<rval);
+                    break;
+               case RSHIFT:
+                    rval = pop(val_stack);
+                    lval = pop(val_stack);
+                    push(val_stack,lval>>rval);
+                    break;
+               case BAND:
+                    rval = pop(val_stack);
+                    lval = pop(val_stack);
+                    push(val_stack,lval&rval);
+                    break;
+               case BOR:
+                    rval = pop(val_stack);
+                    lval = pop(val_stack);
+                    push(val_stack,lval^rval);
+                    break;
+               case COMP:
+                    lval = pop(val_stack);
+                    push(val_stack,~lval);
+                    break;
+               case NEG:
+                    lval = pop(val_stack);
+                    push(val_stack,-lval);
                     break;
                case HALT:
                     ;
-                    printf("Program halted by instruction\n");
-                    int val = pop(val_stack);
+                    int32_t val = pop(val_stack);
                     stack_free(val_stack);
                     return val;
                     break;
                default:
-                   ; 
                     fatal("Exprected opcode but got crap instead");
                     break;
      
@@ -467,16 +510,20 @@ int32_t parse_smachine_expr(const unsigned char *bytecodes){
 } 
 
 
-void parse_smachine(const char *codes ){
-     int val = parse_smachine_expr(codes);
-     printf("%d\n",val);
+int32_t parse_smachine(const uint8_t *codes ){
+     return  parse_smachine_expr(codes);
 }
 
 void smachine_test(void){
-//     smachine_str_intern_init();
-//     smachine_init("LIT 1\2\nADD\nLIT 1\nSUB\nHALT\n"); 
-     const char codes[] = { LIT,4,0,0,0,LIT,1,0,0,0,ADD,HALT};
-     parse_smachine(codes);
+     uint8_t c1[] = { LIT,4,0,0,0,LIT,1,0,0,0,ADD,HALT};
+     uint8_t c2[] = { LIT,16,2,0,0,HALT };
+     uint8_t c3[] = { LIT, 7,0,0,0,LIT,8,0,0,0,MUL,LIT,3,0,0,0,SUB,HALT };
+     uint8_t c4[] = { LIT, 7,0,0,0 };
+     assert( parse_smachine(c1) == 5 );
+     printf("%d\n",parse_smachine(c2) );
+     assert( parse_smachine(c3) == ( 7 * 8 ) - 3 );
+     parse_smachine(c4);
+     
 }
 
 
@@ -492,20 +539,6 @@ void smachine_test(void){
     expr3 = { '-' expr3}|  expr4
     expr4 = INT | '(' expr ')' 
  */
-int power_iter( int x, int n , int a ){
-     if ( n == 0 ){
-          return a;
-     } else if ( !isOdd(n) ) {
-          return power_iter(x*x,n/2,a );
-     } else {
-          return power_iter(x,n-1,a*x);
-     }
-}
-
-int power( int x, int n){
-     assert(n>=0);
-     return power_iter(x,n,1) ;
-}
 
 
 
