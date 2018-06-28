@@ -1,12 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
-//#include <stdint.h>
+#include <stdint.h>
 #include <stddef.h>
 #include <ctype.h>
 #include <string.h>
 #include <assert.h>
 #include <stdbool.h>
 #include <stdarg.h>
+#include <limits.h>
 
 #define MAX(x,y) ( ( ( x ) < ( y ) )?( y ):( x ) )
 #define isOdd(x) (  ( x) & 01 )
@@ -33,14 +34,16 @@ typedef struct buffHdr {
 } buffHdr;
 
 #define buff_hdr(b) (( buffHdr * )( (char *)( b ) - offsetof(buffHdr,buf) ) )
+
+#define buff_len(b) ( (b)?buff_hdr(b)->len:0 )
+#define buff_cap(b) ( (b) ? buff_hdr(b)->cap : 0 )
+#define buff_end(b) ( (b) + buff_len(b) )
 #define buff_fits(b,n) ( ( buff_len(b) + ( n )) <=  buff_cap(b) )
 
 #define buff_fit(b,n) ( (buff_fits(b,n))?0:((b) = buff_grow((b),buff_len(b)+(n),sizeof(*(b))) ) )
 
 
-#define buff_len(b) ( (b)?buff_hdr(b)->len:0 )
-#define buff_cap(b) ( (b) ? buff_hdr(b)->cap : 0 )
-#define buff_push(b,x) ( buff_fit(b,1) , (b)[buff_hdr(b)->len++] = x  )
+#define buff_push(b,...) ( buff_fit(b,1) , (b)[buff_hdr(b)->len++] = ( __VA_ARGS__ )  )
 #define buff_free(b) ( (b)?free(buff_hdr(b)):0 )
 
 void *xmalloc(size_t size){
@@ -69,7 +72,10 @@ void fatal(const char *format, ... ){
 }
 
 void *buff_grow(const void *buff, size_t new_len, size_t elem_size ){
+     assert( buff_cap(buff) <= (SIZE_MAX-1)/2 );
      size_t new_cap = MAX( 1 + 2 * buff_cap(buff), new_len);
+     assert(new_len<=new_cap);
+     assert(new_cap <= ( SIZE_MAX - offsetof(buffHdr,buf) )/elem_size); // new size of the buffer must be smaller than the maximum size of bufer allowed 
      size_t new_size = offsetof(buffHdr,buf) + elem_size*new_cap;
 
      buffHdr *newBuff = NULL; 
@@ -94,6 +100,7 @@ void buff_test(void){
   //   }
   //   putchar('\n'); 
      buff_free(xz);
+     assert(buff_len(xz) == 0 );
      return;
 }
 const char *str_intern_range( const char *start, const char *end);
@@ -210,25 +217,55 @@ bool match_token(TokenKind kind){
      }
 }
 
-char *token_kind_name(TokenKind kind){
-     static char err[100];
+//char *token_kind_name(TokenKind kind){
+//     static char err[100];
+//
+//     switch ( kind ) {
+//          case TOKEN_INT:
+//               sprintf(err,"int");
+//               break;
+//          case TOKEN_NAME:
+//               sprintf(err,"name");
+//               break;
+//          default:
+//               if ( token.kind < 128 && isprint(token.kind) )
+//                    sprintf(err,"%c",token.kind);  // print the character if it is printable
+//               else
+//                    sprintf(err,"%d",token.kind);  // print the ascii value if it is not printable
+//               break;
+//     }
+//     return err;
+//    
+//}
 
-     switch ( kind ) {
+size_t copy_token_kind_str( char *dest, size_t dest_size, TokenKind kind ){
+     size_t n = 0;
+     switch ( kind ){
+          case 0:
+               n = snprintf(dest,dest_size,"End of File");
+               break;
           case TOKEN_INT:
-               sprintf(err,"int");
+               n = snprintf(dest,dest_size,"integer");
                break;
           case TOKEN_NAME:
-               sprintf(err,"name");
+               n = snprintf(dest,dest_size,"name");
                break;
           default:
-               if ( token.kind < 128 && isprint(token.kind) )
-                    sprintf(err,"%c",token.kind);  // print the character if it is printable
-               else
-                    sprintf(err,"%d",token.kind);  // print the ascii value if it is not printable
+               if ( kind < 128 && isprint(kind) ){
+                    n = snprintf(dest,dest_size,"%c",kind);
+               }else {
+                    n = snprintf(dest,dest_size,"<ASCII %d>",kind);
+               }
                break;
      }
-     return err;
-    
+     return n;
+}
+
+const char *token_kind_str(TokenKind kind){
+     static char buf[256];
+     size_t n = copy_token_kind_str(buf,sizeof(buf),kind);
+     assert( n + 1 <= sizeof(buf) );
+     return buf;
 }
 
 bool expect_token(TokenKind kind){
@@ -237,7 +274,9 @@ bool expect_token(TokenKind kind){
           next_token();
           return true;
      } else {
-          fatal("expected %s got %s\n",token_kind_name(kind), token_kind_name(token.kind) );
+          char buff[256];
+          copy_token_kind_str(buff,sizeof(buff),kind);
+          fatal("expected token %s, got %s.\n",buff,token_kind_str(token.kind) );
           return false;
      }
 }
@@ -337,12 +376,12 @@ int parse_expr4(void){
           int val = token.val;
           next_token();
           return val;
+     } else  if ( match_token('(') ){
+               int val = parse_expr();
+               expect_token(')');
+               return val;
      } else {
-          if ( is_token('(') ){
-               next_token();
-               return parse_expr();
-          }
-          expect_token(')');
+          fatal("expected integer or ( but got %s.\n",token_kind_str(token.kind) );
      }
      return token.kind;
 }
@@ -375,25 +414,25 @@ void expr_test(void){
 
 // String Interning begins here.....
 
-typedef struct InternStr {
+typedef struct Intern {
      size_t len;
      const char *str;
-} InternStr;
+} Intern;
 
-InternStr *intern;
+static Intern *intern;
 
 const char *str_intern_range( const char *start, const char *end){
      size_t len = end - start;
      int i;
-     for ( i = 0; i < buff_len(intern) ; i++ ){
-          if ( (intern[i].len == len) && ( strncmp(intern[i].str,start,len) == 0 ) )
-               return intern[i].str;
+     for ( Intern *ip = intern; ip != buff_end(intern) ; ip++ ){
+          if ( ip->len == len && ( strncmp(ip->str,start,len) == 0 ) )
+               return ip->str;
      }
 
      char *string = xmalloc(len+1);
      memcpy(string,start,len);
      string[len] = 0;
-     InternStr newIntern = {len,string};
+     Intern newIntern = {len,string};
 
      buff_push(intern,newIntern );
      return string;
@@ -442,10 +481,14 @@ void lex_test(void){
 //     print_token(token);
 }
 
-int main(void){
-   //  buff_test();
-   //  lex_test();
-   //  str_intern_test();
+void run_tests(void){
+     buff_test();
+     lex_test();
+     str_intern_test();
      expr_test();
+}
+
+int main(int argc, char **argv){
+     run_tests();
      return 0;
 }
