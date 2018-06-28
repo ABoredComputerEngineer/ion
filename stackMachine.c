@@ -540,17 +540,19 @@ void smachine_test(void){
 /*
      The grammar for the parser is as follows:
     expr = expr0
-    expr0 = expr1 { '+'|'-' expr0 }
-    expr1 = expr2 { '*'|'/' expr2 }
-    expr2 = expr3 { '^' expr2}
-    expr3 = { '-' expr3}|  expr4
-    expr4 = INT | '(' expr ')' 
+    expr0 = expr1 { '<<'|'>>' expr1 }
+    expr1 = expr2 { '+'|'-' expr2 }
+    expr2 = expr3 { '*'|'/' expr3 }
+    expr3 = expr4 { '^' expr3}
+    expr4 = { '-' expr4}|  expr5
+    expr5 = INT | '(' expr ')' 
  */
 
 uint8_t *codes;
 
 
 void  parse_expr(void);
+void parse_expr_shift(void);
 void  parse_expr0(void);
 void  parse_expr1(void);
 void  parse_expr2(void);
@@ -558,8 +560,27 @@ void  parse_expr3(void);
 void  parse_expr4(void);
 
 void  parse_expr(void){
-     parse_expr0();
+//     parse_expr0();
+     parse_expr_shift();
      
+}
+
+void parse_expr_shift(void){
+     parse_expr0();
+     while ( is_token('<') || is_token('>')){
+          char tok = token.kind;
+          next_token();
+          expect_token(tok);
+          parse_expr0();
+          if ( tok == '<' ){
+               push(codes,LSHIFT);
+          }else {
+               assert(tok == '>');
+               push(codes,RSHIFT);
+          }
+
+     }
+              
 }
 
 void parse_expr0(void){
@@ -659,7 +680,7 @@ void expr_test(void){
 void get_bytecode( void ){
      enum { MAX_STACK = 1024 };
      codes = stack_init(codes,MAX_STACK,sizeof(uint8_t) );
-     parse_expr_test("2*(3+4)");
+     parse_expr_test("2<<2<<2");
      printf("%d\n",parse_smachine(codes) );
 }
 
