@@ -22,7 +22,7 @@ typedef struct Token {
      char *start;
      char *end;
      union {
-          int val;
+          uint64_t val;
           const char *name;
      };
 } Token;
@@ -103,15 +103,76 @@ void buff_test(void){
      assert(buff_len(xz) == 0 );
      return;
 }
+
+void syntax_error(const char *fmt, ... ){
+     va_list args;
+     va_start(args,fmt);
+     printf("Syntax Error detected.. \n");
+     vprintf(fmt,args);
+     va_end(args);
+}
 const char *str_intern_range( const char *start, const char *end);
 
 
 char *stream;
 Token token;
+
+uint64_t char_to_digit[256] = {
+     ['0'] = 0,
+     ['1'] = 1,
+     ['2'] = 2,
+     ['3'] = 3,
+     ['4'] = 4,
+     ['5'] = 5,
+     ['6'] = 6,
+     ['7'] = 7,
+     ['8'] = 8,
+     ['9'] = 9,
+     ['a'] = 10, ['A'] = 10,
+     ['b'] = 11, ['B'] = 11,
+     ['c'] = 12, ['C'] = 12,
+     ['d'] = 13, ['D'] = 13,
+     ['e'] = 14, ['E'] = 14,
+     ['f'] = 15, ['F'] = 15,
+};
+
+
+
+uint64_t scan_int(uint64_t base){
+     uint64_t val = 0;
+
+     uint64_t digit; 
+
+     for ( ; ; ){
+         digit = char_to_digit[*stream];
+         if ( digit==0 && *stream != '0' ){
+              break;
+         }
+         if ( digit > base ){
+              syntax_error("Digit '%c' out of range for base %lu \n",*stream,base);
+              digit = 0;
+         }
+         if ( val > ( UINT64_MAX - digit )/base){ 
+              syntax_error("Integer literal overflow\n");
+              while ( isdigit(*stream) )
+                   stream++;
+              val = 0;
+         }
+         val = val*base+digit;
+         stream++;
+       
+     }
+     return val;
+
+}
 void next_token(void){
-     int value = 0;
+top:
      token.start = stream;
      switch ( *stream ){
+          case ' ': case '\n': case '\r': case '\t': 
+               while ( isspace(*stream) )
+                    stream++;
+               goto top;
           case '0':
           case '1':
           case '2':
@@ -123,13 +184,22 @@ void next_token(void){
           case '8':
           case '9':
                token.kind = TOKEN_INT;
-
-               while ( isdigit(*stream) ){
-                    value *= 10;
-                    value += (*stream - '0');
-                    stream++;
+               uint64_t base = 10;
+               if ( *stream == '0' ){
+                    *stream++;
+                    if ( 'x' == tolower(*stream)  ){
+                         stream++; 
+                         base = 16;
+                    } else if ( isdigit(*stream) ) {
+                         base  = 8;
+                    } else if ( 'b' == tolower(*stream) ){
+                         stream++; 
+                         base = 2;
+                    } else {
+                         syntax_error("Invalid integer literal '%c' \n",*stream);
+                    }
                }
-               token.val = value;
+               token.val = scan_int(base);
                break;
           case 'a':
           case 'b':
@@ -460,7 +530,7 @@ void str_intern_test(void){
 void print_token( Token tkn ){
      switch ( tkn.kind ){
           case TOKEN_INT:
-               printf("%d\n",tkn.val);
+               printf("%lu\n",tkn.val);
                break;
           case TOKEN_NAME:
                printf("%.*s\n",(int)( tkn.end-tkn.start ), tkn.start );
@@ -472,20 +542,28 @@ void print_token( Token tkn ){
 }
 
 void lex_test(void){
-     char *source = "xy(abc)xy";
-     stream = source;
-     while ( *stream ){
- //         print_token(token);
-          next_token();
-     }
-//     print_token(token);
+     init_stream("2345");
+     assert(token.val == 2345 );
+     print_token(token);
+     //check for integer overflow , UINT_MAX = 18446744073709551615u
+     init_stream("18446744073709551615");
+     
+     init_stream("0xf");
+     assert(token.val == 0xf );
+     init_stream("0b1111");
+     assert(token.val == 15 );
+     init_stream("077");
+     assert(token.val == 077 );
+//     assert( token.val == 18446744073709551615); 
+     print_token(token);
+
 }
 
 void run_tests(void){
      buff_test();
      lex_test();
      str_intern_test();
-     expr_test();
+     //expr_test();
 }
 
 int main(int argc, char **argv){
