@@ -390,8 +390,8 @@ top:
           TOKEN_CASE1('/','=',TOKEN_DIV_ASSIGN)
           TOKEN_CASE1('%','=',TOKEN_MOD_ASSIGN)
           TOKEN_CASE1('^','=',TOKEN_XOR_ASSIGN)
-          TOKEN_CASE1('|','=',TOKEN_OR_ASSIGN)
-          TOKEN_CASE1('&','=',TOKEN_AND_ASSIGN)
+          TOKEN_CASE2('|','=',TOKEN_OR_ASSIGN,'|',TOKEN_OR)
+          TOKEN_CASE2('&','=',TOKEN_AND_ASSIGN,'&',TOKEN_AND)
           TOKEN_CASE1('=','=',TOKEN_EQ)
           TOKEN_CASE1('!','=',TOKEN_NOTEQ)
           TOKEN_CASE1(':','=',TOKEN_COLON_ASSIGN);     
