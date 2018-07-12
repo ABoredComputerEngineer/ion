@@ -2,6 +2,7 @@
 
 declaration = 'enum' enum_decl
               | 'struct' aggregate_decl
+              | 'union' aggregate_decl
               | 'var' var_decl
               | 'const' const_decl
               | 'typedef' typedef_decl
