@@ -1,0 +1,81 @@
+
+
+declaration = 'enum' enum_decl
+              | 'struct' aggregate_decl
+              | 'var' var_decl
+              | 'const' const_decl
+              | 'typedef' typedef_decl
+              | 'func' func_decl
+enum_decl = NAME '{' enum_items '}'
+enum_items = enum_item ( ',' enum_items )?
+enum_item = NAME ( '=' expr )?
+aggregate_decl = NAME '{' ( aggregate_field ';')* '}'
+aggregate_field = name_list ':' type
+name_list = NAME (',' NAME )*
+type_list = type (',' type)*
+type = base_type ('['expr']'|'*')*)
+base_type = NAME | 'func' '(' type_list? ')' ':' type | '(' base_type ')'
+          eg.. func():int[] means int is return type
+               ( func():int )[] means array of function pointers whose return types are int
+
+
+
+var_decl = NAME ('=' expr| ':' type)
+          | NAME '=' expr
+          | NAME ':' type ( '=' expr )?
+
+const_decl = NAME '=' expr
+typedef_decl = NAME '=' type
+func_decl = NAME '(' func_param_list ')' ( ':' type )? '{' stmt_block '}'
+func_param_list = func_param ( ',' func_param )*
+func_param = NAME ':' type
+
+
+STATEMENT GRAMMAR
+ stmt = 'return' expr ';'
+        | 'if' '(' expr ')' stmt_block ('else' 'if' '(' expr ')' stmt_block)* ('else' stmt_block )?
+        |  'while' '(' expr ')' stmt_block
+        |  'for' '(' stmt_list ';' expr ';' stmt_list ')' stmt_block
+        | 'do' stmt_block 'while' '(' expr ')' ';'
+        | expr ( INC|DEC|assign_op expr)?
+        | 'switch' '(' expr ')' switch_block
+        | 'break' ';'
+        | 'continue' ';'
+
+stmt_block = '{' stmt* '}'
+
+switch_block = '{' switch_case * '}'
+switch_case  = (( 'case' expr | default) ':' stmt )
+
+ 
+assign_op =  '=' | COLON_ASSIGN| ADD_ASSIGN| SUB_ASSIGN | MUL_ASSIGN | DIV_ASSIGN | AND_ASSIGN | OR_ASSIGN  | XOR_ASSIGN| MOD_ASSIGN| LSHIFT_ASSIGN| RSHIFT_ASSIGN
+
+
+EXPRESSION GRAMMAR
+Precedence table
+
+mul : * / % << >> &
+add : + - |
+cmp : EQ NOTEQ LTEQ < GTEQ >
+and : &&
+or : ||
+tenary 
+
+expr = tenary_expr
+tenary_expr = or_expr ('?' tenary_expr ':' tenary_expr)?
+or_expr = and_expr ( OR and_expr )?
+and_expr = comp_expr ( AND comp_expr )*
+cmp_expr = add_expr ( comp_op add_expr)*
+add_expr = mul_expr ( add_op mul_expr )*
+mul_expr = unary_expr ( mul_op unary_expr )*
+unary_expr = [+-*&]unary_expr | base_expr
+base_expr = operand_expr ( '(' expr_list ')'
+          | '[' expr ']'
+          | '.' NAME  )
+operand_expr = INT | FLOAT | STR 
+               | NAME ( '{' expr_list '}' )?
+               | '(' expr ')'
+               | typespec? '{' expr_list '}' 
+               | CASE '(' type ')' expr
+typespec = NAME | '(' :type ')'
+     
