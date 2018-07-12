@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <ctype.h>
 #include <string.h>
+#include <inttypes.h>
 #include <math.h>
 #include <assert.h>
 #include <stdbool.h>
@@ -184,7 +185,7 @@ void scan_int(void){
      token.kind = TOKEN_INT;
      token.mod = TOKENMOD_DEC;
      if ( *stream == '0' ){
-          *stream++;
+          stream++;
           if ( 'x' == tolower(*stream)  ){
                stream++; 
                token.mod = TOKENMOD_HEX;
@@ -206,12 +207,12 @@ void scan_int(void){
      }
 
      for ( ; ; ){
-         digit = char_to_digit[*stream];
+         digit = char_to_digit[(unsigned char)*stream];
          if ( digit==0 && *stream != '0' ){
               break;
          }
          if ( digit > base ){
-              syntax_error("Digit '%c' out of range for base %lu \n",*stream,base);
+              syntax_error("Digit '%c' out of range for base %"PRIu64"\n",*stream,base);
               digit = 0;
          }
          if ( val > ( UINT64_MAX - digit )/base){ 
@@ -238,7 +239,7 @@ void scan_float(void){
           if ( tolower( *stream ) == 'e' ){
                stream++;
                if ( *stream == '+' || *stream == '-' )
-                    *stream++;
+                    stream++;
           } else 
                stream++;
      } else {
@@ -246,7 +247,7 @@ void scan_float(void){
      }
 
      while ( isdigit(*stream) ){
-          *stream++;
+          stream++;
      }
      double val = strtod(start,NULL);
      if ( val == HUGE_VAL || val == -HUGE_VAL ){
@@ -273,7 +274,7 @@ void scan_char(){
           syntax_error("char literal cannot be empty.\n");
      } else if ( *stream == '\\' ){
           stream++;
-          val = escape_to_char[*stream];
+          val = escape_to_char[(unsigned char)*stream];
           if ( val == 0 && *stream != 0 ){
                syntax_error("Invalid character literal escpae '\\%c'.\n",*stream);
           }
@@ -300,7 +301,7 @@ void scan_str(void){
           
          if ( *stream == '\\' ){
               stream++;
-              val = escape_to_char[*stream];
+              val = escape_to_char[(unsigned char)*stream];
               if ( val == 0 && *stream != 0 ){
                    syntax_error("Invalid character literal escpae '\\%c'.\n",*stream);
               }
@@ -734,7 +735,6 @@ static Intern *intern;
 
 const char *str_intern_range( const char *start, const char *end){
      size_t len = end - start;
-     int i;
      for ( Intern *ip = intern; ip != buff_end(intern) ; ip++ ){
           if ( ip->len == len && ( strncmp(ip->str,start,len) == 0 ) )
                return ip->str;
@@ -771,7 +771,7 @@ void str_intern_test(void){
 void print_token( Token tkn ){
      switch ( tkn.kind ){
           case TOKEN_INT:
-               printf("%lu\n",tkn.int_val);
+               printf("%"PRIu64"\n",tkn.int_val);
                break;
           case TOKEN_NAME:
                printf("%.*s\n",(int)( tkn.end-tkn.start ), tkn.start );
