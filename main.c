@@ -13,10 +13,13 @@
 
 #include "common.c"
 #include "lex.c"
+#include "ast.c"
+
 void run_tests(void){
      buff_test();
-     lex_test();
      str_intern_test();
+     lex_test();
+     ast_test();
 }
 
 int main(int argc, char **argv){
