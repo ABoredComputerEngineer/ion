@@ -1,4 +1,4 @@
-
+#define BUF(x) x
 #define MAX(x,y) ( ( ( x ) < ( y ) )?( y ):( x ) )
 #define isOdd(x) (  ( x) & 01 )
 
@@ -75,6 +75,14 @@ typedef struct buffHdr {
 
 void *xmalloc(size_t size){
      void *p = malloc(size);
+     if ( p ){
+          return p;
+     } else
+          exit(1);
+}
+
+void *xcalloc(size_t elem_num, size_t size){
+     void *p = calloc(elem_num, size);
      if ( p ){
           return p;
      } else
