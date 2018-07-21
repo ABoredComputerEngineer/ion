@@ -60,7 +60,7 @@ typedef struct buffHdr {
      char buf[0];
 } buffHdr;
 
-#define buff_hdr(b) (( buffHdr * )( (char *)( b ) - offsetof(buffHdr,buf) ) )
+#define buff_hdr(b) (( buffHdr * )( (char *)( ( b ) ) - offsetof(buffHdr,buf) ) )
 
 #define buff_len(b) ( (b)?buff_hdr(b)->len:0 )
 #define buff_cap(b) ( (b) ? buff_hdr(b)->cap : 0 )
@@ -70,8 +70,8 @@ typedef struct buffHdr {
 #define buff_fit(b,n) ( (buff_fits(b,n))?0:((b) = buff_grow((b),buff_len(b)+(n),sizeof(*(b))) ) )
 
 
-#define buff_push(b,...) ( buff_fit(b,1) , (b)[buff_hdr(b)->len++] = ( __VA_ARGS__ )  )
-#define buff_free(b) ( (b)?free(buff_hdr(b)):0 )
+#define buff_push(b,...) ( buff_fit(( b ),1) , (b)[buff_hdr(( b ))->len++] = ( __VA_ARGS__ )  )
+#define buff_free(b) ( (( b ))?free(buff_hdr(( b ))):0 )
 
 void *xmalloc(size_t size){
      void *p = malloc(size);
@@ -127,15 +127,12 @@ void *buff_grow(const void *buff, size_t new_len, size_t elem_size ){
 
 void buff_test(void){
      int *xz = NULL; 
-     buff_push(xz,2);
-     buff_push(xz, 6);
-     buff_push(xz,45);
-  //   for ( i = 0; i < 3 ; i++ ){
-  //        printf("%d\t",xz[i]);
-  //   }
-  //   putchar('\n'); 
-     buff_free(xz);
-     assert(buff_len(xz) == 0 );
+     for ( int i = 0; i < 20; i++){
+          buff_push(xz,i);
+     }
+     for ( int j = 0; j < 20; j++){
+          assert(xz[j] == j );
+     }
      return;
 }
 
