@@ -409,7 +409,7 @@ void print_type(TypeSpec *);
 void print_decl(Decl *);
 void print_name_list( const char **names, size_t num_names ){
      for ( const char **it = names; it!=names+num_names; it++ ){
-          printf("%s ",*it );
+          printf("%s%c ",*it, (it==names+num_names - 1)?' ':',' );
      }
 }
 
@@ -419,36 +419,70 @@ void print_decl(Decl *decl){
                enum_def new = decl->enum_decl;
                printf("(enum  %s ", decl->name);
                for ( enum_item **it = new.enum_items; it != new.enum_items + new.num_enum_items ; it++){
+                    printf("\n\t");
                     printf("%s", (*it)->name );
                     if ( (*it)->expr != NULL ){
                          printf(":");
                          print_expr( (*it)->expr );
                     }
-                    printf(" ");
                }
-               printf(")"); 
+               printf("\n)"); 
                break;
           }
           case DECL_STRUCT:
           case DECL_UNION:
                {
                     printf("(%s %s ",(decl->kind == DECL_STRUCT)?"struct":"union", decl->name);
-                    aggregate_def agg_tmp = decl->aggregate_decl;
-                    for ( aggregate_item **it = agg_tmp.aggregate_items; it != agg_tmp.aggregate_items + agg_tmp.num_aggregate_items;it++){
+                    aggregate_def tmp = decl->aggregate_decl;
+                    for ( aggregate_item **it = tmp.aggregate_items; it != tmp.aggregate_items + tmp.num_aggregate_items;it++){
+                         printf("\n\t");
                          print_name_list( (*it)->name_list, (*it)->num_names );
                          printf(":");
                          print_type( (*it)->type );
-                         printf(" "); 
                     }
-                    printf(")");
+                    printf("\n)");
                     break;
                }
-
-               
           case DECL_VAR:
+               {
+                    printf("(var %s",decl->name );
+                    if ( decl->var_decl.type != NULL ){
+                         printf(":");
+                         print_type(decl->var_decl.type);
+                    } else {
+                         printf(":nil");
+                    }
+                    if ( decl->var_decl.expr != NULL ){
+                        printf(" ");
+                        print_expr(decl->var_decl.expr); 
+                    }
+                    printf(" )");
+                    break;
+               }
           case DECL_CONST:
+               printf("(const %s ",decl->name);
+               print_expr(decl->const_decl.expr);
+               printf(" )");
+               break;
           case DECL_TYPEDEF:
+               printf("(typedef %s ",decl->name);
+               print_type(decl->typedef_decl.type);
+               printf(" )");
+               break;
           case DECL_FUNC:
+               {
+                    func_def tmp = decl->func_decl;
+                    printf("(func %s ( ", decl->name );
+                    for (func_param **it = tmp.param_list; it!=tmp.param_list+tmp.num_params; it++ ){
+                         printf("(%s:", (*it)->name );
+                         print_type((*it)->type);
+                         printf(") ");
+                    }
+                    printf(") : ");
+                    print_type(tmp.ret_type);
+                    printf(" )");
+                    break;
+               }
           default:
                assert(0);
                break;           
@@ -471,12 +505,12 @@ void print_type(TypeSpec *type){
                break;
           case TYPESPEC_FUNC:{
                Func_TypeSpec fn = type->func_decl;
-               printf("(func ");
+               printf("(func (");
                for ( TypeSpec **it = fn.args; it != fn.args + fn.num_args ; it++){
                     printf(" ");
                     print_type(*it);
                }
-               printf(" ");
+               printf("):");
                print_type(fn.ret_type); 
                printf(")");
                break;
@@ -629,9 +663,10 @@ enum_item *new_enum( const char *name, Expr *expr , TypeSpec *type ){
      return new;
 }
 
-aggregate_item *new_aggregate( const char **name_list, TypeSpec *type ){
+aggregate_item *new_aggregate( const char **name_list,size_t num_names, TypeSpec *type ){
      aggregate_item *new = xcalloc(1,sizeof(aggregate_item) );
      new->name_list = name_list;
+     new->num_names = num_names;
      new->type = type;
      return new;
 }
@@ -684,6 +719,8 @@ const char **name_list( size_t count, ... ){
      return list;
 }
 
+
+// Test Function [tstfunc]
 void ast_test(){
      Expr **exps = expr_list(3,expr_name("abc"),expr_int(2),expr_int(3)) ;
      TypeSpec **types = type_list(2,type_name("char"),type_name("int"),type_pointer(type_name("int")));
@@ -695,16 +732,34 @@ void ast_test(){
      };
 
      aggregate_item *agg_list_tmp[] = {
-          new_aggregate( name_list(3,"length","age"), type_name("uint") )
+          new_aggregate( name_list(2,"length","age"),2, type_name("uint") ),
+          new_aggregate( name_list(1,"height"),1,type_name("float")),
+          new_aggregate(name_list(1,"integer_pointer"),1,type_pointer(type_name("int")))
+     };
+
+     func_param *func_param_list[] = {
+         new_func_param("a",type_name("int")),
+         new_func_param("x",type_pointer(type_name("int"))) 
      };
 
      
 
-     Decl *enum_test = decl_enum("Alphabet",3,enum_item_list);
-     Decl *struct_test = decl_aggregate(DECL_STRUCT,"Person",1,agg_list_tmp); 
-     print_decl(enum_test);
-     putchar('\n');
-     print_decl(struct_test);
+     Decl *decl_list[] = {
+          decl_enum("Alphabet",3,enum_item_list),
+          decl_aggregate(DECL_STRUCT,"Person",sizeof(agg_list_tmp)/sizeof(aggregate_item *),agg_list_tmp),
+          decl_aggregate(DECL_UNION,"Person",sizeof(agg_list_tmp)/sizeof(aggregate_item *),agg_list_tmp),
+          decl_var("x",type_name("int"),expr_int(3)),
+          decl_var("x",NULL,expr_int(2)),
+          decl_var("x",type_pointer(type_name("int")),NULL), 
+          decl_const("x",expr_binary('+',expr_int(2),expr_int(3))),
+          decl_typedef("board",type_name("cells")),
+          decl_func("foo", type_name("int"), func_param_list ,sizeof(func_param_list)/sizeof(func_param *) )
+     };
+
+     for ( Decl **it = decl_list; it != decl_list + sizeof(decl_list)/sizeof(Decl *) ; it++ ){
+          print_decl( *it );
+          putchar('\n');
+     }
      
     assert( &enum_item_list[1] == &enum_item_list[0]+1 ); 
 
