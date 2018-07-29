@@ -66,7 +66,7 @@ typedef enum ExprKind {
 typedef enum StmtKind {
      STMT_NONE,
      STMT_AUTO_ASSIGN,
-     STMT_ASSIGN,
+     STMT_OP_ASSIGN,
      STMT_FOR,
      STMT_WHILE,
      STMT_DO_WHILE,
@@ -208,59 +208,76 @@ typedef struct StmtBlock {
      BUF(Stmt **stmts); // Buffer to hold a list of statements
 } StmtBlock;
 
+
 typedef struct Elseif {
      Expr *cond;
      StmtBlock elseif_block;
 } Elseif;
 
-typedef struct Case {
-     size_t num_exprs;
-     BUF(Expr **exprs); // buffer to hold a list of expressions
-     StmtBlock case_block;
-} Case;
-
 typedef struct stmt_if_def {
-     Elseif *elseifs;
+     Expr *cond;  // the condition for if statement
+     size_t num_elseifs;
+     Elseif **elseifs; // list of pointers to else_if blocks
      StmtBlock else_block;
 } stmt_if_def;
 
 typedef struct stmt_auto_assign_def { // Colon assign
      const char *name;
+     Expr *rhs;
 } stmt_auto_assign_def;
 
 typedef struct stmt_op_assign_def {
+     Expr *lhs;
      TokenKind op;
-     const char *name;
+//     const char *name;
      Expr *rhs;
 }  stmt_op_assign_def;
 
+typedef struct Case {
+     Expr *expr; // buffer to hold a list of expressions
+     StmtBlock case_block;
+} Case;
+
 typedef struct stmt_switch_def{
+     Expr *expr;
      size_t num_cases;
-     Case *cases; // buffer to hold all the case statements;
+    BUF( Case **cases;) // buffer to hold all the case statements;
 } stmt_switch_def;
 
 typedef struct stmt_for_def{
+     Expr *expr_init;
      Expr *expr_update;
      Expr *expr_cond;
 } stmt_for_def;
 
+typedef struct stmt_return_def {
+     Expr *ret_expr;
+} stmt_return_def;
+
+typedef struct stmt_while_def {
+     Expr *cond;
+} stmt_while_def;
+
 struct Stmt{
      StmtKind kind;
-     Expr *expr; //  for statements like for, while ,return, switch do while etc, cond expression for if .
+//     Expr *expr; //  for statements like for, while ,return, switch do while etc, cond expression for if .
      StmtBlock block; // Statements block for for, while... statements, if block for if statement.
 
      union {
+          stmt_return_def ret_stmt;
+          stmt_while_def while_stmt;
+          
           stmt_if_def if_stmt;
           stmt_for_def for_stmt;
           stmt_switch_def switch_stmt;
           stmt_auto_assign_def auto_assign_stmt;
-          stmt_op_assign_def op_assign_def;
+          stmt_op_assign_def op_assign_stmt;
      };
 
 };
 
 
-// Expressions constructors
+// Expressions constructors [exprcon]
 Expr *expr_int( uint64_t int_val );
 Expr *expr_float( double float_val);
 Expr *expr_str( const char *str_val);
@@ -274,7 +291,7 @@ Expr *expr_index(Expr *operand, Expr *index);
 Expr *expr_compound( TypeSpec *type, Expr **args, size_t num_args );
 
 
-// TypeSpec constructors
+// TypeSpec constructors [typecon]
 
 TypeSpec *type_alloc(TypeSpecKind kind){
      TypeSpec *new = xcalloc(1,sizeof(TypeSpec));
@@ -407,9 +424,62 @@ Expr *expr_compound( TypeSpec *type, Expr **args, size_t num_args ){
 void print_expr(Expr *);
 void print_type(TypeSpec *);
 void print_decl(Decl *);
+void print_stmt(Stmt *);
 void print_name_list( const char **names, size_t num_names ){
      for ( const char **it = names; it!=names+num_names; it++ ){
           printf("%s%c ",*it, (it==names+num_names - 1)?' ':',' );
+     }
+}
+
+int indent = 0;
+char *indent_string = "\t\t\t\t\t\t\t\t\t\t";
+
+void print_stmt_block(StmtBlock block,int indent){
+     for ( Stmt **stmt = block.stmts; stmt != block.stmts + block.num_stmts ; stmt++ ){
+          putchar('\n');
+          printf("%.*s",indent+1,indent_string);
+          print_stmt(*stmt);
+     }
+}
+void print_stmt(Stmt *stmt){
+     switch ( stmt->kind ) {
+          case STMT_IF:
+               {
+                    stmt_if_def tmp = stmt->if_stmt;
+                    printf("(if ");
+                    print_expr(tmp.cond);
+                    printf("\n\t(then ");
+                    indent++;
+                    print_stmt_block(stmt->block,indent++);
+                    printf(")\n");
+                    indent--;
+                    if ( tmp.elseifs != NULL ){
+                         for ( Elseif **it = tmp.elseifs; it != tmp.elseifs + tmp.num_elseifs ; it++){
+                              printf("( elseif ");
+                              print_expr( (*it)->cond);
+                              printf("\n\t(then ");
+                              print_stmt_block( (*it)->elseif_block, indent++ );
+                              printf(")");
+                         }
+                    }
+
+                    if ( tmp.else_block.num_stmts != 0 ){
+                         printf("\t(else ");
+                         print_stmt_block(tmp.else_block,indent++);
+                         printf(")");
+                    }
+                    printf(")");
+                    break;
+               }
+          case STMT_BREAK:
+               printf("( break )");
+               break;
+          case STMT_CONTINUE:
+               printf("( continue )");
+               break;
+          default:
+               assert(0);
+               break;
      }
 }
 
@@ -605,7 +675,7 @@ void print_expr( Expr *expr ) {
 
 
 
-// Declaration constructors [Declcon]
+// Declaration constructors [declcon]
 Decl *decl_new( DeclKind kind, const char *name ){
      Decl *new_decl = xcalloc(1,sizeof(Decl));
      new_decl->kind = kind;
@@ -678,7 +748,7 @@ func_param *new_func_param( const char *name, TypeSpec *type ){
      return new;
 }
 
-// List Constructors [Liscon]
+// List Constructors [listcon]
 
 Expr **expr_list(size_t count, ... ){
      va_list exprs;
@@ -719,6 +789,115 @@ const char **name_list( size_t count, ... ){
      return list;
 }
 
+Stmt **stmt_list(size_t num_stmts, ... ){
+     va_list stmts;
+     va_start(stmts,num_stmts);
+     Stmt **stmt_list = NULL;
+     for ( int i = 0; i < num_stmts; i++ ){
+          buff_push(stmt_list,va_arg(stmts,Stmt*));
+     }
+     va_end( stmts );
+     return stmt_list;
+        
+}
+
+
+// Statement Constructors [stmtcon]
+//typedef struct Elseif {
+//     Expr *cond;
+//     StmtBlock elseif_block;
+//} Elseif;
+//
+//typedef struct stmt_if_def {
+//     Elseif **elseifs; // list of pointers to else_if blocks
+//     StmtBlock else_block;
+//} stmt_if_def;
+//
+
+StmtBlock new_block(size_t num_stmts, Stmt **stmts){
+    return (StmtBlock){num_stmts,stmts};
+     
+}
+
+Stmt *new_stmt(StmtKind kind, StmtBlock block ){
+     Stmt *new = xcalloc(1,sizeof(Stmt));
+     new->kind = kind;
+     new->block = block;
+    return new; 
+}
+
+
+Elseif *new_elif( Expr *cond, StmtBlock block){
+     Elseif *new = xcalloc(1,sizeof(Elseif));
+     new->cond = cond;
+     new->elseif_block = block;
+     return new;
+}
+
+Elseif **elseif_list(size_t num, ... ){
+     va_list elifs;
+     va_start(elifs,num);
+     Elseif **new = NULL;
+     for ( int i = 0; i < num ; i++ ){
+          buff_push(new,va_arg(elifs,Elseif*));
+     }
+     va_end(elifs);
+     return new;
+}
+
+Stmt *stmt_if( Expr *condition,StmtBlock if_block,size_t num_elseifs, Elseif **elseifs, StmtBlock else_block ){
+     Stmt *new= new_stmt(STMT_IF,if_block);
+     new->if_stmt.cond = condition;
+     new->if_stmt.elseifs = elseifs;
+     new->if_stmt.num_elseifs = num_elseifs;
+     new->if_stmt.else_block = else_block;
+     return  new;
+}
+
+//typedef enum StmtKind {
+//     STMT_NONE,
+//     STMT_AUTO_ASSIGN,
+//     STMT_ASSIGN,
+//     STMT_FOR,
+//     STMT_WHILE,
+//     STMT_DO_WHILE,
+//     STMT_IF,
+//     STMT_SWITCH,
+//     STMT_RETURN,
+//     STMT_BREAK,
+//     STMT_CONTINUE
+//} StmtKind;
+
+Stmt *stmt_auto_assign(const char *name, Expr *expr){
+     Stmt *new = new_stmt(STMT_AUTO_ASSIGN,(StmtBlock){0,NULL});
+     new->auto_assign_stmt.rhs = expr;
+     new->auto_assign_stmt.name = name;
+     return new;
+}
+Stmt *stmt_op_assign(Expr *lhs, TokenKind op, Expr *rhs){
+     Stmt *new = new_stmt(STMT_OP_ASSIGN,(StmtBlock){0,NULL});
+     new->op_assign_stmt.lhs = lhs;
+     new->op_assign_stmt.op = op;
+     new->op_assign_stmt.rhs = rhs;
+     return new;
+}
+Stmt *stmt_for();
+Stmt *stmt_while();
+Stmt *stmt_do_while();
+Stmt *stmt_if();
+Stmt *stmt_switch();
+Stmt *stmt_return();
+
+
+Stmt *stmt_break(void){
+     return new_stmt(STMT_BREAK, (StmtBlock){0,NULL } );
+}
+
+Stmt *stmt_continue(void){
+     return new_stmt(STMT_CONTINUE,(StmtBlock){0,NULL});
+}
+
+
 
 // Test Function [tstfunc]
 void ast_test(){
@@ -731,6 +910,10 @@ void ast_test(){
           new_enum("ghi",NULL,NULL)
      };
 
+     StmtBlock block_test = new_block(2,stmt_list(2,stmt_break(),stmt_continue()) );
+//     print_stmt_block(block_test);
+     print_stmt(stmt_if(expr_binary('=',expr_int(1),expr_int(2)),block_test,0,NULL,block_test));
+     putchar('\n');
      aggregate_item *agg_list_tmp[] = {
           new_aggregate( name_list(2,"length","age"),2, type_name("uint") ),
           new_aggregate( name_list(1,"height"),1,type_name("float")),
