@@ -1,4 +1,3 @@
-
 typedef struct Decl Decl;
 typedef struct Expr Expr;
 typedef struct Stmt Stmt;
@@ -234,12 +233,13 @@ typedef struct stmt_op_assign_def {
 }  stmt_op_assign_def;
 
 typedef struct Case {
-     Expr *expr; // buffer to hold a list of expressions
+     Expr *case_expr; // buffer to hold a list of expressions
      StmtBlock case_block;
 } Case;
 
 typedef struct stmt_switch_def{
      Expr *expr;
+     StmtBlock default_block;
      size_t num_cases;
     BUF( Case **cases;) // buffer to hold all the case statements;
 } stmt_switch_def;
@@ -251,11 +251,11 @@ typedef struct stmt_for_def{
 } stmt_for_def;
 
 typedef struct stmt_return_def {
-     Expr *ret_expr;
+     Expr *return_expr;
 } stmt_return_def;
 
 typedef struct stmt_while_def {
-     Expr *cond;
+     Expr *expr_cond;
 } stmt_while_def;
 
 struct Stmt{
@@ -264,9 +264,9 @@ struct Stmt{
      StmtBlock block; // Statements block for for, while... statements, if block for if statement.
 
      union {
-          stmt_return_def ret_stmt;
+          stmt_return_def return_stmt;
           stmt_while_def while_stmt;
-          
+                    
           stmt_if_def if_stmt;
           stmt_for_def for_stmt;
           stmt_switch_def switch_stmt;
@@ -433,6 +433,58 @@ void print_name_list( const char **names, size_t num_names ){
 
 int indent = 0;
 char *indent_string = "\t\t\t\t\t\t\t\t\t\t";
+typedef enum operators {
+     INC = 200,
+     DEC,
+     LSHIFT,
+     RSHIFT,
+     EQ,
+     NOTEQ,
+     LTEQ,
+     GTEQ,
+     AND,
+     OR,
+     ADD_ASSIGN,
+     MUL_ASSIGN,
+     SUB_ASSIGN,
+     DIV_ASSIGN,
+     MOD_ASSIGN,
+     AND_ASSIGN,
+     OR_ASSIGN,
+     XOR_ASSIGN,
+     LSHIFT_ASSIGN,
+     RSHIFT_ASSIGN,
+     COLON_ASSIGN,
+     ASSIGN,
+} operators;
+
+char *operations[] = {
+     [ LSHIFT] = "<<",
+     [ RSHIFT] = ">>",
+     [ EQ ] = "==",
+     [ NOTEQ ] = "!=",
+     [ LTEQ ] = "<=",
+     [ GTEQ ] = ">=",
+     [ AND ] = "&&",
+     [ OR ] = "||",
+     [ ADD_ASSIGN ] = "+=",
+     [ MUL_ASSIGN ] = "*=",
+     [ SUB_ASSIGN ] = "-+",
+     [ DIV_ASSIGN ] = "/=",
+     [ MOD_ASSIGN ] = "%=",
+     [ AND_ASSIGN ] = "&=",
+     [ OR_ASSIGN ] = "|=",
+     [ XOR_ASSIGN ] = "^=",
+     [ LSHIFT_ASSIGN ] = "<<=",
+     [ RSHIFT_ASSIGN ] = ">>=",
+     [ COLON_ASSIGN ] = ":=",
+     [ '=' ] = "=",
+     ['+'] = "+",
+     ['-'] = "-",
+     [ '*' ] = "*",
+     [ '/' ] = "/",
+     [ '%' ] = "%" 
+};
 
 void print_stmt_block(StmtBlock block,int indent){
      for ( Stmt **stmt = block.stmts; stmt != block.stmts + block.num_stmts ; stmt++ ){
@@ -448,8 +500,7 @@ void print_stmt(Stmt *stmt){
                     stmt_if_def tmp = stmt->if_stmt;
                     printf("(if ");
                     print_expr(tmp.cond);
-                    printf("\n\t(then ");
-                    indent++;
+                    printf("\n(then ");
                     print_stmt_block(stmt->block,indent++);
                     printf(")\n");
                     indent--;
@@ -459,15 +510,16 @@ void print_stmt(Stmt *stmt){
                               print_expr( (*it)->cond);
                               printf("\n\t(then ");
                               print_stmt_block( (*it)->elseif_block, indent++ );
-                              printf(")");
+                              indent--;
+                              printf(")\n");
                          }
                     }
-
                     if ( tmp.else_block.num_stmts != 0 ){
-                         printf("\t(else ");
+                         printf("(else ");
                          print_stmt_block(tmp.else_block,indent++);
                          printf(")");
                     }
+                    indent-=1;
                     printf(")");
                     break;
                }
@@ -477,6 +529,86 @@ void print_stmt(Stmt *stmt){
           case STMT_CONTINUE:
                printf("( continue )");
                break;
+          case STMT_FOR:
+               printf("(for ");
+               printf("(");
+               print_expr(stmt->for_stmt.expr_init);
+               printf(")");
+               printf("(");
+               print_expr(stmt->for_stmt.expr_cond);
+               printf(")");
+               printf("(");
+               print_expr(stmt->for_stmt.expr_update);
+               printf(")");
+               //printf("\n");
+               //printf("(");
+               print_stmt_block(stmt->block,indent++);
+               printf(")");
+               indent--;
+               break;
+          case STMT_WHILE:
+               printf("( while ");
+               print_expr(stmt->while_stmt.expr_cond);
+               print_stmt_block(stmt->block,indent++);
+               printf(")");
+               indent--;
+               break;
+          case STMT_DO_WHILE:
+               printf("( do ");
+               print_stmt_block(stmt->block,indent++);
+               printf(") while (");
+               print_expr(stmt->while_stmt.expr_cond);
+               printf(")"); 
+               indent--;
+               break;   
+          case STMT_AUTO_ASSIGN:
+               printf("( %s := ",stmt->auto_assign_stmt.name);
+               print_expr( stmt->auto_assign_stmt.rhs); 
+               printf(")");
+               break;
+          case STMT_OP_ASSIGN:
+               printf("( ");
+               print_expr(stmt->op_assign_stmt.lhs);
+               printf(" = " );
+               print_expr(stmt->op_assign_stmt.rhs);
+               printf(" )");
+               break;
+          case STMT_RETURN:
+               printf("( return ");
+               print_expr(stmt->return_stmt.return_expr);
+               printf(")");
+               break;
+               
+//typedef struct Case {
+//     Expr *expr; // buffer to hold a list of expressions
+//     StmtBlock case_block;
+//} Case;
+//
+//typedef struct stmt_switch_def{
+//     Expr *expr;
+//     size_t num_cases;
+//    BUF( Case **cases;) // buffer to hold all the case statements;
+//} stmt_switch_def;
+          case STMT_SWITCH:
+               {
+                    stmt_switch_def tmp = stmt->switch_stmt;
+                    printf("(switch ");
+                    print_expr(tmp.expr);
+                    
+                    for ( Case **it = tmp.cases; it!= tmp.cases + tmp.num_cases; it++){
+                         
+                         printf("\n(case ");
+                         print_expr( (*it)->case_expr );
+                         print_stmt_block( (*it)->case_block, indent++ );
+                         indent--;
+                         printf("\nbreak)");
+                    }
+                    printf("\n(default ");
+                    print_stmt_block(  tmp.default_block, indent++ );
+                    indent--;
+                    printf("))");
+                    break;
+               }
           default:
                assert(0);
                break;
@@ -635,7 +767,7 @@ void print_expr( Expr *expr ) {
                printf(")");
                break;
           case EXPR_BINARY:
-               printf("(%c ", expr->op);
+               printf("(%s ", operations[expr->op]);
                print_expr(expr->binary_expr.left);
                printf(" ");
                print_expr(expr->binary_expr.right);
@@ -798,9 +930,18 @@ Stmt **stmt_list(size_t num_stmts, ... ){
      }
      va_end( stmts );
      return stmt_list;
-        
 }
 
+Case **case_list( size_t num_cases, ... ){
+     va_list cases;
+     va_start(cases,num_cases);
+     Case **tmp = NULL;
+     for ( int i = 0; i < num_cases; i++ ){
+          buff_push(tmp,va_arg(cases,Case*));
+     }
+     va_end(cases);
+     return tmp;
+}
 
 // Statement Constructors [stmtcon]
 //typedef struct Elseif {
@@ -881,12 +1022,45 @@ Stmt *stmt_op_assign(Expr *lhs, TokenKind op, Expr *rhs){
      new->op_assign_stmt.rhs = rhs;
      return new;
 }
-Stmt *stmt_for();
-Stmt *stmt_while();
-Stmt *stmt_do_while();
-Stmt *stmt_if();
-Stmt *stmt_switch();
-Stmt *stmt_return();
+Stmt *stmt_for(Expr *init, Expr *cond, Expr *update, StmtBlock block){
+     Stmt *new = new_stmt(STMT_FOR,block);
+     new->for_stmt.expr_init = init;
+     new->for_stmt.expr_cond = cond;
+     new->for_stmt.expr_update = update;
+     return new;
+}
+Stmt *stmt_while(Expr *cond, StmtBlock block){
+     Stmt *new = new_stmt(STMT_WHILE,block);
+     new->while_stmt.expr_cond = cond;
+     return new;
+}
+
+Stmt *stmt_do_while(Expr *cond, StmtBlock block){
+     Stmt *new = new_stmt(STMT_DO_WHILE,block);
+     new->while_stmt.expr_cond = cond;
+     return new;
+}
+
+Case *new_case( Expr *expr, StmtBlock block ){
+     Case *new = xcalloc(1,sizeof(Case));
+     new->case_expr = expr;
+     new->case_block = block;
+     return new;
+}
+
+Stmt *stmt_switch(Expr *expr, size_t num_cases, Case **cases, StmtBlock default_block){
+     Stmt *new = new_stmt(STMT_SWITCH,default_block);
+     new->switch_stmt.expr = expr;
+     new->switch_stmt.num_cases = num_cases;
+     new->switch_stmt.cases = cases;
+     new->switch_stmt.default_block = default_block;
+     return new;
+}
+Stmt *stmt_return(Expr *expr){
+     Stmt *new = new_stmt(STMT_RETURN, (StmtBlock){0,NULL});
+     new->return_stmt.return_expr =  expr;
+     return new;
+}
 
 
 Stmt *stmt_break(void){
@@ -900,20 +1074,15 @@ Stmt *stmt_continue(void){
 
 
 // Test Function [tstfunc]
-void ast_test(){
-     Expr **exps = expr_list(3,expr_name("abc"),expr_int(2),expr_int(3)) ;
-     TypeSpec **types = type_list(2,type_name("char"),type_name("int"),type_pointer(type_name("int")));
-     
+//
+
+void ast_decl_test(){
      enum_item *enum_item_list[] = { 
           new_enum("ABC",expr_int(2),NULL),
           new_enum("def",expr_int(3),NULL),
           new_enum("ghi",NULL,NULL)
      };
-
-     StmtBlock block_test = new_block(2,stmt_list(2,stmt_break(),stmt_continue()) );
-//     print_stmt_block(block_test);
-     print_stmt(stmt_if(expr_binary('=',expr_int(1),expr_int(2)),block_test,0,NULL,block_test));
-     putchar('\n');
+     
      aggregate_item *agg_list_tmp[] = {
           new_aggregate( name_list(2,"length","age"),2, type_name("uint") ),
           new_aggregate( name_list(1,"height"),1,type_name("float")),
@@ -926,6 +1095,7 @@ void ast_test(){
      };
 
      
+    assert( &enum_item_list[1] == &enum_item_list[0]+1 ); 
 
      Decl *decl_list[] = {
           decl_enum("Alphabet",3,enum_item_list),
@@ -943,9 +1113,44 @@ void ast_test(){
           print_decl( *it );
           putchar('\n');
      }
-     
-    assert( &enum_item_list[1] == &enum_item_list[0]+1 ); 
+}
 
+
+void ast_stmt_test(){
+
+     Stmt **stmt1 = stmt_list(3,stmt_break(),stmt_op_assign(expr_name("i"),'=',expr_name("x")),stmt_while(expr_binary(EQ,expr_name("ab"),expr_int(1)),new_block(1,stmt_list(1,stmt_continue()))));
+     
+
+     Stmt **stmt2 = stmt_list(2,stmt_return(expr_int(1)), stmt_for(expr_binary('=',expr_name("i"),expr_int(1)),expr_binary(LTEQ,expr_name("i"),expr_int(10)),expr_binary('+',expr_name("i"),expr_int(1)),new_block(1,stmt_list(1,stmt_continue()))));     
+     StmtBlock block_test1 = new_block(3,stmt1 );
+
+     StmtBlock block_test2 = new_block(2,stmt2);
+     Elseif **elifs = elseif_list(1,new_elif(expr_int(1),block_test1));
+
+     Case **cases = case_list(2, new_case(expr_int(1),block_test1), new_case(expr_int(2),block_test2));
+     
+     Stmt *stmt_list[] = {
+          stmt_if(expr_binary(LSHIFT_ASSIGN,expr_int(1),expr_int(2)),block_test1,1,elifs,block_test1),
+          stmt_while(expr_binary(LTEQ,expr_name("abc"),expr_int(12)), block_test1),
+          stmt_do_while(expr_binary(LTEQ,expr_name("c"),expr_int(15)), block_test2),
+          stmt_switch(expr_name("a"),2,cases,block_test2),
+          stmt_auto_assign("a",expr_int(123))
+     };
+//     print_stmt_block(block_test);
+//     print_stmt(stmt_if(expr_binary(LSHIFT_ASSIGN,expr_int(1),expr_int(2)),block_test,0,NULL,block_test));
+     putchar('\n');
+
+     for ( Stmt **it = stmt_list; it != stmt_list + sizeof(stmt_list)/sizeof(Stmt *); it++ ){
+          print_stmt(*it);
+          putchar('\n');
+     }
+     
+}
+
+
+void ast_expr_test(){
+     Expr **exps = expr_list(3,expr_name("abc"),expr_int(2),expr_int(3)) ;
+     TypeSpec **types = type_list(2,type_name("char"),type_name("int"),type_pointer(type_name("int")));
      Expr *expr_list[] = {
           expr_int(1234),
           expr_float(1.234),
@@ -969,4 +1174,10 @@ void ast_test(){
           print_expr( *it );
           putchar('\n');
      }
+}
+void ast_test(){
+     ast_decl_test();
+     ast_expr_test();
+     ast_stmt_test();     
+
 }
