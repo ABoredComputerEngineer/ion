@@ -216,7 +216,7 @@ typedef struct Elseif {
 typedef struct stmt_if_def {
      Expr *cond;  // the condition for if statement
      size_t num_elseifs;
-     Elseif **elseifs; // list of pointers to else_if blocks
+     Elseif *elseifs; // list of pointers to else_if blocks
      StmtBlock else_block;
 } stmt_if_def;
 
@@ -241,7 +241,7 @@ typedef struct stmt_switch_def{
      Expr *expr;
      StmtBlock default_block;
      size_t num_cases;
-    BUF( Case **cases;) // buffer to hold all the case statements;
+    BUF( Case *cases;) // buffer to hold all the case statements;
 } stmt_switch_def;
 
 typedef struct stmt_for_def{
@@ -505,11 +505,11 @@ void print_stmt(Stmt *stmt){
                     printf(")\n");
                     indent--;
                     if ( tmp.elseifs != NULL ){
-                         for ( Elseif **it = tmp.elseifs; it != tmp.elseifs + tmp.num_elseifs ; it++){
+                         for ( Elseif *it = tmp.elseifs; it != tmp.elseifs + tmp.num_elseifs ; it++){
                               printf("( elseif ");
-                              print_expr( (*it)->cond);
+                              print_expr( (it)->cond);
                               printf("\n\t(then ");
-                              print_stmt_block( (*it)->elseif_block, indent++ );
+                              print_stmt_block( (it)->elseif_block, indent++ );
                               indent--;
                               printf(")\n");
                          }
@@ -587,7 +587,7 @@ void print_stmt(Stmt *stmt){
 //typedef struct stmt_switch_def{
 //     Expr *expr;
 //     size_t num_cases;
-//    BUF( Case **cases;) // buffer to hold all the case statements;
+//    BUF( Case *cases;) // buffer to hold all the case statements;
 //} stmt_switch_def;
           case STMT_SWITCH:
                {
@@ -595,11 +595,11 @@ void print_stmt(Stmt *stmt){
                     printf("(switch ");
                     print_expr(tmp.expr);
                     
-                    for ( Case **it = tmp.cases; it!= tmp.cases + tmp.num_cases; it++){
+                    for ( Case *it = tmp.cases; it!= tmp.cases + tmp.num_cases; it++){
                          
                          printf("\n(case ");
-                         print_expr( (*it)->case_expr );
-                         print_stmt_block( (*it)->case_block, indent++ );
+                         print_expr( (it)->case_expr );
+                         print_stmt_block( (it)->case_block, indent++ );
                          indent--;
                          printf("\nbreak)");
                     }
@@ -932,12 +932,12 @@ Stmt **stmt_list(size_t num_stmts, ... ){
      return stmt_list;
 }
 
-Case **case_list( size_t num_cases, ... ){
+Case *case_list( size_t num_cases, ... ){
      va_list cases;
      va_start(cases,num_cases);
-     Case **tmp = NULL;
+     Case *tmp = NULL;
      for ( int i = 0; i < num_cases; i++ ){
-          buff_push(tmp,va_arg(cases,Case*));
+          buff_push(tmp,va_arg(cases,Case));
      }
      va_end(cases);
      return tmp;
@@ -968,25 +968,22 @@ Stmt *new_stmt(StmtKind kind, StmtBlock block ){
 }
 
 
-Elseif *new_elif( Expr *cond, StmtBlock block){
-     Elseif *new = xcalloc(1,sizeof(Elseif));
-     new->cond = cond;
-     new->elseif_block = block;
-     return new;
+Elseif new_elif( Expr *cond, StmtBlock block){
+     return (Elseif){cond,block};
 }
 
-Elseif **elseif_list(size_t num, ... ){
+Elseif *elseif_list(size_t num, ... ){
      va_list elifs;
      va_start(elifs,num);
-     Elseif **new = NULL;
+     Elseif *new = NULL;
      for ( int i = 0; i < num ; i++ ){
-          buff_push(new,va_arg(elifs,Elseif*));
+          buff_push(new,va_arg(elifs,Elseif));
      }
      va_end(elifs);
      return new;
 }
 
-Stmt *stmt_if( Expr *condition,StmtBlock if_block,size_t num_elseifs, Elseif **elseifs, StmtBlock else_block ){
+Stmt *stmt_if( Expr *condition,StmtBlock if_block,size_t num_elseifs, Elseif *elseifs, StmtBlock else_block ){
      Stmt *new= new_stmt(STMT_IF,if_block);
      new->if_stmt.cond = condition;
      new->if_stmt.elseifs = elseifs;
@@ -1041,14 +1038,11 @@ Stmt *stmt_do_while(Expr *cond, StmtBlock block){
      return new;
 }
 
-Case *new_case( Expr *expr, StmtBlock block ){
-     Case *new = xcalloc(1,sizeof(Case));
-     new->case_expr = expr;
-     new->case_block = block;
-     return new;
+Case new_case( Expr *expr, StmtBlock block ){
+     return (Case){expr,block};
 }
 
-Stmt *stmt_switch(Expr *expr, size_t num_cases, Case **cases, StmtBlock default_block){
+Stmt *stmt_switch(Expr *expr, size_t num_cases, Case *cases, StmtBlock default_block){
      Stmt *new = new_stmt(STMT_SWITCH,default_block);
      new->switch_stmt.expr = expr;
      new->switch_stmt.num_cases = num_cases;
@@ -1125,9 +1119,9 @@ void ast_stmt_test(){
      StmtBlock block_test1 = new_block(3,stmt1 );
 
      StmtBlock block_test2 = new_block(2,stmt2);
-     Elseif **elifs = elseif_list(1,new_elif(expr_int(1),block_test1));
+     Elseif *elifs = elseif_list(1,new_elif(expr_int(1),block_test1));
 
-     Case **cases = case_list(2, new_case(expr_int(1),block_test1), new_case(expr_int(2),block_test2));
+     Case *cases = case_list(2, new_case(expr_int(1),block_test1), new_case(expr_int(2),block_test2));
      
      Stmt *stmt_list[] = {
           stmt_if(expr_binary(LSHIFT_ASSIGN,expr_int(1),expr_int(2)),block_test1,1,elifs,block_test1),
