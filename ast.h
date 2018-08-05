@@ -5,6 +5,10 @@ typedef struct Stmt Stmt;
 typedef enum TypeSpecKind TypeSpecKind;
 typedef struct TypeSpec TypeSpec;
 
+typedef struct StmtBlock {
+     size_t num_stmts;
+     BUF(Stmt **stmts); // Buffer to hold a list of statements
+} StmtBlock;
 enum TypeSpecKind {
      TYPESPEC_NAME,
      TYPESPEC_PAREN,
@@ -13,13 +17,13 @@ enum TypeSpecKind {
      TYPESPEC_POINTER
 };
 
-typedef struct Func_TypeSpec{
+typedef struct func_typespec{
      struct{
           BUF( TypeSpec **args;) // Buffer to hold the data type of arguments given to a function ) )
           size_t num_args;
      };
      TypeSpec *ret_type; // The return type of the function
-} Func_TypeSpec;
+} func_typespec;
 
 struct TypeSpec{
      TypeSpecKind kind;
@@ -30,7 +34,7 @@ struct TypeSpec{
                TypeSpec *base_type; // Base type of an array
                Expr *size; // Index of the array
           };
-          Func_TypeSpec func_decl;
+          func_typespec func_decl;
      };
 };
 
@@ -96,19 +100,20 @@ typedef struct func_param {
 } func_param;
 
 typedef struct func_def{
-     BUF(func_param **param_list); // Buffer for storing function parameter list
+     BUF(func_param *param_list); // Buffer for storing function parameter list
      size_t num_params;
      TypeSpec *ret_type;  // return type of the function
+     StmtBlock block;
 } func_def;
 
 typedef struct enum_def{
      size_t num_enum_items;
-     enum_item **enum_items; // Buffer for storing items of enum declaration,e.g. ( name : expr )
+     enum_item *enum_items; // Buffer for storing items of enum declaration,e.g. ( name : expr )
 } enum_def;
 
 typedef struct aggregate_def{
      size_t num_aggregate_items;
-     aggregate_item **aggregate_items; // Buffer to store the name value pairs for structures and unions``
+     aggregate_item *aggregate_items; // Buffer to store the name value pairs for structures and unions``
 } aggregate_def;
 
 typedef struct typedef_def{
@@ -204,10 +209,6 @@ struct Expr {
      };
 };
 
-typedef struct StmtBlock {
-     size_t num_stmts;
-     BUF(Stmt **stmts); // Buffer to hold a list of statements
-} StmtBlock;
 
 
 typedef struct Elseif {

@@ -348,17 +348,17 @@ void print_stmt(Stmt *stmt){
      }
 }
 
-void print_decl(Decl *decl){
+void print_decl(Decl *decl){ // TODO : Add print StmtBlock to func declarations
      switch ( decl->kind ){
           case DECL_ENUM:{
                enum_def new = decl->enum_decl;
                printf("(enum  %s ", decl->name);
-               for ( enum_item **it = new.enum_items; it != new.enum_items + new.num_enum_items ; it++){
+               for ( enum_item *it = new.enum_items; it != new.enum_items + new.num_enum_items ; it++){
                     printf("\n\t");
-                    printf("%s", (*it)->name );
-                    if ( (*it)->expr != NULL ){
+                    printf("%s", (it)->name );
+                    if ( (it)->expr != NULL ){
                          printf(":");
-                         print_expr( (*it)->expr );
+                         print_expr( (it)->expr );
                     }
                }
                printf("\n)"); 
@@ -369,11 +369,11 @@ void print_decl(Decl *decl){
                {
                     printf("(%s %s ",(decl->kind == DECL_STRUCT)?"struct":"union", decl->name);
                     aggregate_def tmp = decl->aggregate_decl;
-                    for ( aggregate_item **it = tmp.aggregate_items; it != tmp.aggregate_items + tmp.num_aggregate_items;it++){
+                    for ( aggregate_item *it = tmp.aggregate_items; it != tmp.aggregate_items + tmp.num_aggregate_items;it++){
                          printf("\n\t");
-                         print_name_list( (*it)->name_list, (*it)->num_names );
+                         print_name_list( (it)->name_list, (it)->num_names );
                          printf(":");
-                         print_type( (*it)->type );
+                         print_type( (it)->type );
                     }
                     printf("\n)");
                     break;
@@ -408,14 +408,22 @@ void print_decl(Decl *decl){
                {
                     func_def tmp = decl->func_decl;
                     printf("(func %s ( ", decl->name );
-                    for (func_param **it = tmp.param_list; it!=tmp.param_list+tmp.num_params; it++ ){
-                         printf("(%s:", (*it)->name );
-                         print_type((*it)->type);
+                    for (func_param *it = tmp.param_list; it!=tmp.param_list+tmp.num_params; it++ ){
+                         printf("(%s:", (it)->name );
+                         print_type((it)->type);
                          printf(") ");
                     }
-                    printf(") : ");
-                    print_type(tmp.ret_type);
+                    printf(")");
+                    if ( tmp.ret_type ) { // type is not NULL i.e there is a return type
+                         printf(" : ");
+                         print_type(tmp.ret_type);
+                    }
+                    
                     printf(" )");
+                    printf("(");
+                    print_stmt_block(tmp.block,++indent);
+                    indent--;
+                    printf("\n)");
                     break;
                }
           default:
@@ -439,7 +447,7 @@ void print_type(TypeSpec *type){
                printf(")");
                break;
           case TYPESPEC_FUNC:{
-               Func_TypeSpec fn = type->func_decl;
+               func_typespec fn = type->func_decl;
                printf("(func (");
                for ( TypeSpec **it = fn.args; it != fn.args + fn.num_args ; it++){
                     printf(" ");
@@ -548,14 +556,14 @@ Decl *decl_new( DeclKind kind, const char *name ){
      return new_decl;
 }
 
-Decl *decl_enum(const char *name, size_t num_enum_items, enum_item **item_list){
+Decl *decl_enum(const char *name, size_t num_enum_items, enum_item *item_list){
      Decl *new_decl = decl_new(DECL_ENUM, name);
      new_decl->enum_decl.num_enum_items = num_enum_items;
      new_decl->enum_decl.enum_items = item_list;
      return new_decl;
 }
 
-Decl *decl_aggregate( DeclKind kind, const char *name, size_t num_aggregate_items, aggregate_item **item_list ){
+Decl *decl_aggregate( DeclKind kind, const char *name, size_t num_aggregate_items, aggregate_item *item_list ){
      Decl *new = decl_new(kind,name);
      new->aggregate_decl.num_aggregate_items = num_aggregate_items;
      new->aggregate_decl.aggregate_items = item_list;
@@ -581,36 +589,35 @@ Decl *decl_typedef( const char *name , TypeSpec *type){
      return new;
 }
 
-Decl *decl_func( const char *name, TypeSpec *ret_type, func_param **param_list, size_t num_params){
+//TODO : Add StmtBlock
+Decl *decl_func( const char *name, TypeSpec *ret_type, func_param *param_list, size_t num_params,StmtBlock block){
      Decl *new = decl_new(DECL_FUNC, name );
      new->func_decl.ret_type = ret_type;
      new->func_decl.num_params = num_params;
      new->func_decl.param_list = param_list;
+     new->func_decl.block = block;
      return new;
 } 
 
 
-enum_item *new_enum( const char *name, Expr *expr , TypeSpec *type ){
-     enum_item *new = xcalloc(1,sizeof(enum_item));
-     new->name = name;
-     new->expr = expr;
-     new->type = type;
-     return new;
+enum_item new_enum( const char *name, Expr *expr ){
+//     enum_item *new = xcalloc(1,sizeof(enum_item));
+//     new->name = name;
+//     new->expr = expr;
+//     new->type = type;
+     return (enum_item){name,expr}; 
 }
 
-aggregate_item *new_aggregate( const char **name_list,size_t num_names, TypeSpec *type ){
-     aggregate_item *new = xcalloc(1,sizeof(aggregate_item) );
-     new->name_list = name_list;
-     new->num_names = num_names;
-     new->type = type;
-     return new;
+aggregate_item new_aggregate( const char **name_list,size_t num_names, TypeSpec *type ){
+ //    aggregate_item *new = xcalloc(1,sizeof(aggregate_item) );
+ //    new->name_list = name_list;
+ //    new->num_names = num_names;
+ //    new->type = type;
+     return (aggregate_item){name_list,num_names,type}; 
 }
 
-func_param *new_func_param( const char *name, TypeSpec *type ){
-     func_param *new = xcalloc(1,sizeof(func_param) );
-     new->name = name;
-     new->type = type;
-     return new;
+func_param new_func_param( const char *name, TypeSpec *type ){
+     return (func_param){name,type};
 }
 
 // List Constructors [listcon]
@@ -804,19 +811,22 @@ Stmt *stmt_expr(Expr *expr){
 //
 
 void ast_decl_test(){
-     enum_item *enum_item_list[] = { 
-          new_enum("ABC",expr_int(2),NULL),
-          new_enum("def",expr_int(3),NULL),
-          new_enum("ghi",NULL,NULL)
+     Stmt **stmt1 = stmt_list(3,stmt_break(),stmt_expr(expr_name("i")),stmt_while(expr_binary(EQ,expr_name("ab"),expr_int(1)),new_block(1,stmt_list(1,stmt_continue()))));
+     
+     StmtBlock block_test1 = new_block(3,stmt1 );
+     enum_item enum_item_list[] = { 
+          new_enum("ABC",expr_int(2)),
+          new_enum("def",expr_int(3)),
+          new_enum("ghi",NULL)
      };
      
-     aggregate_item *agg_list_tmp[] = {
+     aggregate_item agg_list_tmp[] = {
           new_aggregate( name_list(2,"length","age"),2, type_name("uint") ),
           new_aggregate( name_list(1,"height"),1,type_name("float")),
           new_aggregate(name_list(1,"integer_pointer"),1,type_pointer(type_name("int")))
      };
 
-     func_param *func_param_list[] = {
+     func_param func_param_list[] = {
          new_func_param("a",type_name("int")),
          new_func_param("x",type_pointer(type_name("int"))) 
      };
@@ -826,14 +836,14 @@ void ast_decl_test(){
 
      Decl *decl_list[] = {
           decl_enum("Alphabet",3,enum_item_list),
-          decl_aggregate(DECL_STRUCT,"Person",sizeof(agg_list_tmp)/sizeof(aggregate_item *),agg_list_tmp),
-          decl_aggregate(DECL_UNION,"Person",sizeof(agg_list_tmp)/sizeof(aggregate_item *),agg_list_tmp),
+          decl_aggregate(DECL_STRUCT,"Person",sizeof(agg_list_tmp)/sizeof(aggregate_item ),agg_list_tmp),
+          decl_aggregate(DECL_UNION,"Person",sizeof(agg_list_tmp)/sizeof(aggregate_item),agg_list_tmp),
           decl_var("x",type_name("int"),expr_int(3)),
           decl_var("x",NULL,expr_int(2)),
           decl_var("x",type_pointer(type_name("int")),NULL), 
           decl_const("x",expr_binary('+',expr_int(2),expr_int(3))),
           decl_typedef("board",type_name("cells")),
-          decl_func("foo", type_name("int"), func_param_list ,sizeof(func_param_list)/sizeof(func_param *) )
+          decl_func("foo", type_name("int"), func_param_list ,sizeof(func_param_list)/sizeof(func_param),block_test1 )
      };
 
      for ( Decl **it = decl_list; it != decl_list + sizeof(decl_list)/sizeof(Decl *) ; it++ ){
