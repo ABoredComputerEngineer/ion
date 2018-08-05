@@ -14,12 +14,15 @@
 #include "common.c"
 #include "lex.c"
 #include "ast.c"
+#include "parse.c"
+
 
 void run_tests(void){
      buff_test();
      str_intern_test();
      lex_test();
      ast_test();
+     parse_test();
 }
 
 int main(int argc, char **argv){
