@@ -29,7 +29,8 @@ typedef enum TokenKind{
      TOKEN_XOR_ASSIGN,
      TOKEN_LSHIFT_ASSIGN,
      TOKEN_RSHIFT_ASSIGN,
-     TOKEN_COLON_ASSIGN
+     TOKEN_COLON_ASSIGN,
+     TOKEN_KEYWORD
 } TokenKind;
 
 typedef enum TokenMod{
@@ -142,4 +143,5 @@ void syntax_error(const char *fmt, ... ){
      printf("Syntax Error detected.. \n");
      vprintf(fmt,args);
      va_end(args);
+     exit(1);
 }
