@@ -1,5 +1,58 @@
-
+const char *str_intern(char *);
 const char *str_intern_range( const char *start, const char *end);
+bool is_token_keyword(const char *);
+const char *tyepdef_keyword;
+const char *const_keyword;
+const char *var_keyword;
+const char *enum_keyword;
+const char *struct_keyword;
+const char *union_keyword;
+const char *func_keyword;
+const char *if_keyword;
+const char *switch_keyword;
+const char *while_keyword;
+const char *for_keyword;
+const char *do_keyword;
+//const char *_keyword;
+//const char *_keyword;
+const char **keywords = NULL;
+
+//#define keyword_intern(x) ( #x_keyword  = str_intern(#x); buff_push(keywords,#x_keyword) )
+
+void keyword_intern(char *key ){
+     const char *x = str_intern(key);
+
+     buff_push(keywords,x);
+}
+
+void init_intern_keyword(void){
+     static int init = 0;
+     if ( init ){
+         return;
+     } 
+     keyword_intern("typedef");
+     keyword_intern("const");
+     keyword_intern("var");
+     keyword_intern("enum");
+     keyword_intern("struct");
+     keyword_intern("union");
+     keyword_intern("func");
+     keyword_intern("if");
+     keyword_intern("switch");
+     keyword_intern("while");
+     keyword_intern("for");
+     keyword_intern("do");
+     //keyword_intern();
+     init++;
+}
+
+bool is_token_keyword(const char *key ){
+     for ( const char **it = keywords; it != keywords + buff_len(keywords); it++ ){
+          if ( strcmp(key,*it )  == 0 )
+               return true;
+     }
+     return false;
+}
 
 
 char *stream;
@@ -175,8 +228,9 @@ void scan_str(void){
 #define TOKEN_CASE1(c,c1,k1) \
      case c:\
      token.kind = *stream++;\
-     if ( *stream++ == c1 ) {\
+     if ( *stream == c1 ) {\
           token.kind = k1;\
+          stream++;\
      }\
      break;
 
@@ -339,9 +393,10 @@ top:
           case 'Z':
           case '_':
                token.kind = TOKEN_NAME;
-               while ( isalpha(*stream) )
+               while ( isalpha(*stream) || *stream == '_' || isdigit(*stream))
                     stream++;
                token.name = str_intern_range(token.start,stream); 
+               token.kind = ( is_token_keyword(token.name) )?TOKEN_KEYWORD:TOKEN_NAME ;
                break;
 
           default:
@@ -359,6 +414,7 @@ bool is_token(TokenKind kind){
      return token.kind == kind;
 }
 
+
 bool is_token_name(const char *name){ 
      // checks if the type of token is name and if it is the desired name
      return token.kind == TOKEN_NAME  && token.name == name ; 
@@ -370,6 +426,16 @@ bool match_token(TokenKind kind){
           next_token();
           return true;
      } else{
+          return false;
+     }
+}
+
+
+bool match_keyword(char *x){
+     if ( token.kind == TOKEN_KEYWORD && strcmp(token.name,x) == 0 ){
+          next_token();
+          return true;
+     } else {
           return false;
      }
 }
