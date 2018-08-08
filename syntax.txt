@@ -38,15 +38,16 @@ STATEMENT GRAMMAR
         |  'while' '(' expr ')' stmt_block
         |  'for' '(' stmt_list ';' expr ';' stmt_list ')' stmt_block
         | 'do' stmt_block 'while' '(' expr ')' ';'
-        | expr ( INC|DEC|assign_op expr)?
+        | expr ( INC|DEC|assign_op expr)? // simple stmt
         | 'switch' '(' expr ')' switch_block
         | 'break' ';'
         | 'continue' ';'
+        | stmt_block
 
 stmt_block = '{' stmt* '}'
 
 switch_block = '{' switch_case * '}'
-switch_case  = (( 'case' expr | default) ':' stmt )
+switch_case  = (( 'case' expr | default) ':' stmt* )
 
  
 assign_op =  '=' | COLON_ASSIGN| ADD_ASSIGN| SUB_ASSIGN | MUL_ASSIGN | DIV_ASSIGN | AND_ASSIGN | OR_ASSIGN  | XOR_ASSIGN| MOD_ASSIGN| LSHIFT_ASSIGN| RSHIFT_ASSIGN
