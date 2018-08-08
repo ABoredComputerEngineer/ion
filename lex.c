@@ -12,12 +12,15 @@ const char *if_keyword;
 const char *else_keyword;
 const char *then_keyword;
 const char *switch_keyword;
+const char *case_keyword;
+const char *default_keyword;
 const char *while_keyword;
 const char *for_keyword;
 const char *do_keyword;
 const char *continue_keyword;
 const char *break_keyword;
 const char *return_keyword;
+
 //const char *_keyword;
 //const char *_keyword;
 const char **keywords = NULL;
@@ -46,6 +49,8 @@ void init_intern_keyword(void){
      keyword_intern("then");
      keyword_intern("else");
      keyword_intern("switch");
+     keyword_intern("case");
+     keyword_intern("default");
      keyword_intern("while");
      keyword_intern("for");
      keyword_intern("do");
@@ -110,7 +115,7 @@ void scan_int(void){
                stream++; 
                base = 2;
           } else {
-               if ( *stream == 0 ){ // if number is single zero i.e, "0" 
+               if ( !isdigit(*stream) ){ // if number is single zero i.e, "0" 
                     token.int_val = 0;
                     return;
                }
@@ -424,6 +429,12 @@ bool is_token(TokenKind kind){
      return token.kind == kind;
 }
 
+bool is_keyword(const char *key){
+     return is_token_keyword(key) && (strcmp(token.name,key) == 0);
+}
+bool is_assign_op(){
+     return ( token.kind >= TOKEN_ADD_ASSIGN && token.kind <= TOKEN_RSHIFT_ASSIGN );
+}
 
 bool is_token_name(const char *name){ 
      // checks if the type of token is name and if it is the desired name
@@ -448,6 +459,16 @@ bool match_keyword(char *x){
      } else {
           return false;
      }
+}
+
+bool expect_keyword(char *x){
+     if ( match_keyword(x) ){
+          return true;
+     } else {
+          syntax_error("Expected %s but got %s insted",x,token.name);
+          exit(1);
+     }
+     return false;
 }
 
 //char *token_kind_name(TokenKind kind){
@@ -546,7 +567,7 @@ int power( int x, int n){
 }
 
 
-
+/*
 int parse_expr(void);
 int parse_expr0(void);
 int parse_expr1(void);
@@ -623,10 +644,6 @@ int parse_expr4(void){
      return token.kind;
 }
 
-void init_stream( char *str){
-     stream = str;
-     next_token();
-}
 
 int parse_expr_test(char *str){
      init_stream(str);
@@ -648,9 +665,13 @@ void expr_test(void){
        assert( parse_expr_test("3^3") == 27 );
 }
 #undef TOKEN_TEST
-
+*/
 // String Interning begins here.....
 
+void init_stream( char *str){
+     stream = str;
+     next_token();
+}
 typedef struct Intern {
      size_t len;
      const char *str;
