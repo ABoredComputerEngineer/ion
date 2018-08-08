@@ -143,6 +143,7 @@ Expr *expr_compound( TypeSpec *type, Expr **args, size_t num_args ){
 
 
 // Print Functios [prnfunc]
+#define print_newline  printf("\n%.*s",indent,indent_string),assert(indent>=0)
 void print_expr(Expr *);
 void print_type(TypeSpec *);
 void print_decl(Decl *);
@@ -181,25 +182,27 @@ typedef enum operators {
 } operators;
 
 char *operations[] = {
-     [ LSHIFT] = "<<",
-     [ RSHIFT] = ">>",
-     [ EQ ] = "==",
-     [ NOTEQ ] = "!=",
-     [ LTEQ ] = "<=",
-     [ GTEQ ] = ">=",
-     [ AND ] = "&&",
-     [ OR ] = "||",
-     [ ADD_ASSIGN ] = "+=",
-     [ MUL_ASSIGN ] = "*=",
-     [ SUB_ASSIGN ] = "-+",
-     [ DIV_ASSIGN ] = "/=",
-     [ MOD_ASSIGN ] = "%=",
-     [ AND_ASSIGN ] = "&=",
-     [ OR_ASSIGN ] = "|=",
-     [ XOR_ASSIGN ] = "^=",
-     [ LSHIFT_ASSIGN ] = "<<=",
-     [ RSHIFT_ASSIGN ] = ">>=",
-     [ COLON_ASSIGN ] = ":=",
+     [ TOKEN_LSHIFT] = "<<",
+     [ TOKEN_RSHIFT] = ">>",
+     [ TOKEN_EQ ] = "==",
+     [ TOKEN_NOTEQ ] = "!=",
+     [ TOKEN_LTEQ ] = "<=",
+     [ TOKEN_GTEQ ] = ">=",
+     [ TOKEN_AND ] = "&&",
+     [ TOKEN_OR ] = "||",
+     [ TOKEN_ADD_ASSIGN ] = "+=",
+     [ TOKEN_MUL_ASSIGN ] = "*=",
+     [ TOKEN_SUB_ASSIGN ] = "-+",
+     [ TOKEN_DIV_ASSIGN ] = "/=",
+     [ TOKEN_MOD_ASSIGN ] = "%=",
+     [ TOKEN_AND_ASSIGN ] = "&=",
+     [ TOKEN_OR_ASSIGN ] = "|=",
+     [ TOKEN_XOR_ASSIGN ] = "^=",
+     [ TOKEN_LSHIFT_ASSIGN ] = "<<=",
+     [ TOKEN_RSHIFT_ASSIGN ] = ">>=",
+     [ TOKEN_COLON_ASSIGN ] = ":=",
+     [ TOKEN_INC ] = "++",
+     [ TOKEN_DEC ] = "--",
      [ '=' ] = "=",
      ['+'] = "+",
      ['-'] = "-",
@@ -210,11 +213,13 @@ char *operations[] = {
 
 void print_stmt_block(StmtBlock block,int indent){
      for ( Stmt **stmt = block.stmts; stmt != block.stmts + block.num_stmts ; stmt++ ){
-          putchar('\n');
-          printf("%.*s",indent+1,indent_string);
+//          putchar('\n');
+          print_newline;
           print_stmt(*stmt);
      }
 }
+
+
 void print_stmt(Stmt *stmt){
      switch ( stmt->kind ) {
           case STMT_IF:
@@ -222,26 +227,33 @@ void print_stmt(Stmt *stmt){
                     stmt_if_def tmp = stmt->if_stmt;
                     printf("(if ");
                     print_expr(tmp.cond);
-                    printf("\n(then ");
-                    print_stmt_block(stmt->if_stmt.if_block,indent++);
-                    printf(")\n");
+//                    printf("\n%.*s",indent,indent_string);
+                    //indent++;
+                    print_newline;
+                    printf("(then ");
+                    print_stmt_block(stmt->if_stmt.if_block,++indent);
+                    printf(")");
                     indent--;
                     if ( tmp.elseifs != NULL ){
                          for ( Elseif *it = tmp.elseifs; it != tmp.elseifs + tmp.num_elseifs ; it++){
+                              print_newline;
                               printf("( elseif ");
                               print_expr( (it)->cond);
-                              printf("\n\t(then ");
-                              print_stmt_block( (it)->elseif_block, indent++ );
+                              print_newline;
+                              printf("(then ");
+                              print_stmt_block( (it)->elseif_block, ++indent );
                               indent--;
-                              printf(")\n");
+                              printf(")");
                          }
                     }
                     if ( tmp.else_block.num_stmts != 0 ){
+                         print_newline;
                          printf("(else ");
-                         print_stmt_block(tmp.else_block,indent++);
+                         print_stmt_block(tmp.else_block,++indent);
                          printf(")");
+                         indent--;
                     }
-                    indent-=1;
+                    //indent-=1;
                     printf(")");
                     break;
                }
@@ -254,36 +266,42 @@ void print_stmt(Stmt *stmt){
           case STMT_FOR:
                printf("(for ");
                printf("(");
-               print_expr(stmt->for_stmt.expr_init);
+               if ( stmt->for_stmt.stmt_init ){
+                    print_stmt(stmt->for_stmt.stmt_init);
+               }
                printf(")");
                printf("(");
+               if ( stmt->for_stmt.expr_cond ){
                print_expr(stmt->for_stmt.expr_cond);
+               }
                printf(")");
                printf("(");
-               print_expr(stmt->for_stmt.expr_update);
+               if ( stmt->for_stmt.stmt_update ){
+               print_stmt(stmt->for_stmt.stmt_update);
+               }
                printf(")");
                //printf("\n");
                //printf("(");
-               print_stmt_block(stmt->for_stmt.block,indent++);
+               print_stmt_block(stmt->for_stmt.block,++indent);
                printf(")");
                indent--;
                break;
           case STMT_WHILE:
                printf("( while ");
                print_expr(stmt->while_stmt.expr_cond);
-               print_stmt_block(stmt->while_stmt.block,indent++);
+               print_stmt_block(stmt->while_stmt.block,++indent);
                printf(")");
                indent--;
                break;
           case STMT_DO_WHILE:
                printf("( do ");
-               print_stmt_block(stmt->while_stmt.block,indent++);
+               print_stmt_block(stmt->while_stmt.block,++indent);
                printf(") while (");
                print_expr(stmt->while_stmt.expr_cond);
                printf(")"); 
                indent--;
                break;   
-          case STMT_ASSIGN:
+          case STMT_INIT:
                printf("( %s := ",stmt->assign_stmt.name);
                print_expr( stmt->assign_stmt.rhs); 
                printf(")");
@@ -316,24 +334,29 @@ void print_stmt(Stmt *stmt){
                     stmt_switch_def tmp = stmt->switch_stmt;
                     printf("(switch ");
                     print_expr(tmp.expr);
+                             indent++; 
+                              print_newline;
                     
                     for ( Case *it = tmp.cases; it!= tmp.cases + tmp.num_cases; it++){
-                         if ( !(it->isdefault) ){     
-                              printf("\n(case ");
+                         if ( !(it->isdefault) ){    
+                              printf("(case ");
                               for ( Expr **ie = it->expr_list; ie!=it->expr_list+it->num_expr; ie++){
-                                   
                                    print_expr( *ie );
                                    printf(" ");
                               }
                          } else {
-                              printf("\n(default ");
+                              //print_newline;
+                              printf("(default ");
                          }
-                         print_stmt_block( (it)->case_block, indent++ );
+                         print_stmt_block( (it)->case_block, ++indent );
+                         printf(")");
                          indent--;
-                         printf("\nbreak)");
+                         print_newline;
+                         //indent-=1;
                     }
                     indent--;
-                    printf("))");
+                    print_newline;
+                    printf(")");
                     break;
                }
 
@@ -353,14 +376,16 @@ void print_decl(Decl *decl){ // TODO : Add print StmtBlock to func declarations
           case DECL_ENUM:{
                enum_def new = decl->enum_decl;
                printf("(enum  %s ", decl->name);
+               indent++;
                for ( enum_item *it = new.enum_items; it != new.enum_items + new.num_enum_items ; it++){
-                    printf("\n\t");
+                    print_newline;
                     printf("%s", (it)->name );
                     if ( (it)->expr != NULL ){
                          printf(":");
                          print_expr( (it)->expr );
                     }
                }
+               indent--;
                printf("\n)"); 
                break;
           }
@@ -369,12 +394,15 @@ void print_decl(Decl *decl){ // TODO : Add print StmtBlock to func declarations
                {
                     printf("(%s %s ",(decl->kind == DECL_STRUCT)?"struct":"union", decl->name);
                     aggregate_def tmp = decl->aggregate_decl;
+                         indent++;
                     for ( aggregate_item *it = tmp.aggregate_items; it != tmp.aggregate_items + tmp.num_aggregate_items;it++){
-                         printf("\n\t");
+                       //  printf("\n\t");
+                         print_newline;
                          print_name_list( (it)->name_list, (it)->num_names );
                          printf(":");
                          print_type( (it)->type );
                     }
+                    indent--;
                     printf("\n)");
                     break;
                }
@@ -423,7 +451,8 @@ void print_decl(Decl *decl){ // TODO : Add print StmtBlock to func declarations
                     printf("(");
                     print_stmt_block(tmp.block,++indent);
                     indent--;
-                    printf("\n)");
+                    print_newline;
+                    printf(")");
                     break;
                }
           default:
@@ -515,7 +544,7 @@ void print_expr( Expr *expr ) {
                printf(")");
                break;
           case EXPR_UNARY:
-               printf("(%c ", expr->op);
+               printf("(%s ", operations[expr->op]);
                print_expr(expr->unary_expr.operand);
                printf(")");
                break;
@@ -745,19 +774,26 @@ Stmt *stmt_if( Expr *condition,StmtBlock if_block,size_t num_elseifs, Elseif *el
 //     STMT_BREAK,
 //     STMT_CONTINUE
 //} StmtKind;
-
-Stmt *stmt_assign(const char *name, Expr *expr){
-     Stmt *new = new_stmt(STMT_ASSIGN);
+Stmt *stmt_expr(Expr *);
+Stmt *stmt_assign(TokenKind op, Expr *lhs, Expr *rhs){
+     if ( op == TOKEN_INC || op == TOKEN_DEC ){
+          return stmt_expr(expr_unary(op,lhs));
+     } else {
+          return stmt_expr(expr_binary(op,lhs,rhs));
+     }
+}
+Stmt *stmt_init(const char *name, Expr *expr){
+     Stmt *new = new_stmt(STMT_INIT);
      new->assign_stmt.rhs = expr;
      new->assign_stmt.name = name;
      return new;
 }
-Stmt *stmt_for(Expr *init, Expr *cond, Expr *update, StmtBlock block){
+Stmt *stmt_for(Stmt *init, Expr *cond, Stmt *update, StmtBlock block){
      Stmt *new = new_stmt(STMT_FOR);
      new->for_stmt.block = block;
-     new->for_stmt.expr_init = init;
+     new->for_stmt.stmt_init = init;
      new->for_stmt.expr_cond = cond;
-     new->for_stmt.expr_update = update;
+     new->for_stmt.stmt_update = update;
      return new;
 }
 Stmt *stmt_while(Expr *cond, StmtBlock block){
@@ -811,7 +847,7 @@ Stmt *stmt_expr(Expr *expr){
 //
 
 void ast_decl_test(){
-     Stmt **stmt1 = stmt_list(3,stmt_break(),stmt_expr(expr_name("i")),stmt_while(expr_binary(EQ,expr_name("ab"),expr_int(1)),new_block(1,stmt_list(1,stmt_continue()))));
+     Stmt **stmt1 = stmt_list(3,stmt_break(),stmt_expr(expr_name("i")),stmt_while(expr_binary(TOKEN_EQ,expr_name("ab"),expr_int(1)),new_block(1,stmt_list(1,stmt_continue()))));
      
      StmtBlock block_test1 = new_block(3,stmt1 );
      enum_item enum_item_list[] = { 
@@ -855,9 +891,9 @@ void ast_decl_test(){
 
 void ast_stmt_test(){
 
-     Stmt **stmt1 = stmt_list(3,stmt_break(),stmt_expr(expr_name("i")),stmt_while(expr_binary(EQ,expr_name("ab"),expr_int(1)),new_block(1,stmt_list(1,stmt_continue()))));
+     Stmt **stmt1 = stmt_list(3,stmt_break(),stmt_expr(expr_name("i")),stmt_while(expr_binary(TOKEN_EQ,expr_name("ab"),expr_int(1)),new_block(1,stmt_list(1,stmt_continue()))));
      
-     Stmt **stmt2 = stmt_list(3, stmt_return(expr_name("true")),stmt_expr(expr_binary(LTEQ,expr_name("a"),expr_int(3))),stmt_continue());
+     Stmt **stmt2 = stmt_list(3, stmt_return(expr_name("true")),stmt_expr(expr_binary(TOKEN_LTEQ,expr_name("a"),expr_int(3))),stmt_continue());
      StmtBlock block_test1 = new_block(3,stmt1 );
 
      StmtBlock block_test2 = new_block(2,stmt2);
@@ -866,11 +902,11 @@ void ast_stmt_test(){
      Case *cases = case_list(2, new_case(expr_list(2,expr_int(1),expr_name("a")),2,false,block_test1), new_case(expr_list(1,expr_int(2)),1,true,block_test2));
      
      Stmt *stmt_list[] = {
-          stmt_if(expr_binary(LSHIFT_ASSIGN,expr_int(1),expr_int(2)),block_test1,1,elifs,block_test1),
-          stmt_while(expr_binary(LTEQ,expr_name("abc"),expr_int(12)), block_test1),
-          stmt_do_while(expr_binary(LTEQ,expr_name("c"),expr_int(15)), block_test2),
+          stmt_if(expr_binary(TOKEN_LSHIFT_ASSIGN,expr_int(1),expr_int(2)),block_test1,1,elifs,block_test1),
+          stmt_while(expr_binary(TOKEN_LTEQ,expr_name("abc"),expr_int(12)), block_test1),
+          stmt_do_while(expr_binary(TOKEN_LTEQ,expr_name("c"),expr_int(15)), block_test2),
           stmt_switch(expr_name("a"),2,cases),
-          stmt_assign("a",expr_int(123))
+          stmt_init("a",expr_int(123))
      };
 //     print_stmt_block(block_test);
 //     print_stmt(stmt_if(expr_binary(LSHIFT_ASSIGN,expr_int(1),expr_int(2)),block_test,0,NULL,block_test));
