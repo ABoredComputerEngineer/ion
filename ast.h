@@ -69,6 +69,7 @@ typedef enum ExprKind {
 
 typedef enum StmtKind {
      STMT_NONE,
+     STMT_INIT,
      STMT_ASSIGN,
      STMT_EXPR,
      STMT_FOR,
@@ -237,6 +238,7 @@ typedef struct stmt_op_assign_def {
 }  stmt_op_assign_def;
 
 typedef struct Case {
+     // supports list of exprs
      Expr **expr_list; // buffer to hold a list of expressions
      size_t num_expr;
      bool isdefault;
@@ -244,14 +246,14 @@ typedef struct Case {
 } Case;
 
 typedef struct stmt_switch_def{
-     Expr *expr; // Allows for multiple expression checking e.g case '1', 1 , 2 : ... 
+     Expr *expr; 
      size_t num_cases;
     BUF( Case *cases;) // buffer to hold all the case statements;
 } stmt_switch_def;
 
 typedef struct stmt_for_def{
-     Expr *expr_init;
-     Expr *expr_update;
+     Stmt *stmt_init;
+     Stmt *stmt_update;
      Expr *expr_cond;
      StmtBlock block; // Statements block for for, while... statements, if block for if statement.
 } stmt_for_def;
