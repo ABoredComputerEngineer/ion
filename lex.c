@@ -311,9 +311,17 @@ top:
           TOKEN_CASE1('^','=',TOKEN_XOR_ASSIGN)
           TOKEN_CASE2('|','=',TOKEN_OR_ASSIGN,'|',TOKEN_OR)
           TOKEN_CASE2('&','=',TOKEN_AND_ASSIGN,'&',TOKEN_AND)
-          TOKEN_CASE1('=','=',TOKEN_EQ)
+          //TOKEN_CASE1('=','=',TOKEN_EQ)
           TOKEN_CASE1('!','=',TOKEN_NOTEQ)
           TOKEN_CASE1(':','=',TOKEN_COLON_ASSIGN);     
+          case '=':
+               token.kind = TOKEN_ASSIGN;
+               stream++;
+               if ( *stream == '=' ){
+                    token.kind = TOKEN_EQ;
+                    stream++;
+               }
+               break;
           case '<':
                token.kind = *stream++;
                if ( *stream == '<' ){
@@ -433,7 +441,22 @@ bool is_keyword(const char *key){
      return is_token_keyword(key) && (strcmp(token.name,key) == 0);
 }
 bool is_assign_op(){
-     return ( token.kind >= TOKEN_ADD_ASSIGN && token.kind <= TOKEN_RSHIFT_ASSIGN );
+     return ( token.kind >= TOKEN_ASSIGN && token.kind <= TOKEN_RSHIFT_ASSIGN );
+}
+
+bool is_unary_op(){
+     return token.kind == '*' || token.kind == '~' || token.kind == '&' || token.kind == '-'|| token.kind =='+';
+}
+
+bool is_mul_op(){
+     return token.kind == '*' || token.kind == '/' || token.kind == TOKEN_LSHIFT || token.kind == TOKEN_RSHIFT || token.kind == '&' || token.kind == '%';
+}
+bool is_add_op(){
+     return token.kind == '+' || token.kind == '-' || token.kind == '|' ;
+}
+
+bool is_comp_op(){
+     return token.kind == TOKEN_EQ || token.kind == TOKEN_NOTEQ || token.kind == TOKEN_LTEQ || token.kind == TOKEN_GTEQ || token.kind == '<' || token.kind == '>';
 }
 
 bool is_token_name(const char *name){ 
