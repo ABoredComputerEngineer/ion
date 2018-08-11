@@ -63,8 +63,9 @@ typedef enum ExprKind {
      EXPR_UNARY,
      EXPR_BINARY,
      EXPR_TERNARY,
-     EXPR_COMPOUND
-
+     EXPR_COMPOUND,
+     EXPR_SIZEOF_TYPE,
+     EXPR_SIZEOF_EXPR
 } ExprKind;
 
 typedef enum StmtKind {
@@ -188,6 +189,8 @@ typedef struct cast_def{
      TypeSpec *cast_type;
      Expr *expr;
 } cast_def;
+
+
 struct Expr {
      ExprKind kind;
      TokenKind op;
@@ -196,6 +199,8 @@ struct Expr {
           double float_val;
           const char *str_val;
           const char *name;
+          Expr *sizeof_expr;
+          TypeSpec *sizeof_type;
           unary_def unary_expr;
           array_def array_expr;
           field_def field_expr;
@@ -267,6 +272,11 @@ typedef struct stmt_while_def {
      StmtBlock block; // Statements block for for, while... statements, if block for if statement.
 } stmt_while_def;
 
+typedef struct stmt_init_def{
+     const char *name;
+     Expr *rhs;
+} stmt_init_def;
+
 struct Stmt{
      StmtKind kind;
 //     Expr *expr; //  for statements like for, while ,return, switch do while etc, cond expression for if .
@@ -278,6 +288,7 @@ struct Stmt{
           stmt_if_def if_stmt;
           stmt_for_def for_stmt;
           stmt_switch_def switch_stmt;
+          stmt_init_def init_stmt;
           stmt_assign_def assign_stmt;
           Expr *expr_stmt;
           StmtBlock block;
