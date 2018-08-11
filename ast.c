@@ -140,7 +140,17 @@ Expr *expr_compound( TypeSpec *type, Expr **args, size_t num_args ){
      new_expr->compound_expr.num_args = num_args;
      return new_expr;
 }
+Expr *expr_sizeof_expr(Expr *expr){
+     Expr *new= expr_new(EXPR_SIZEOF_EXPR);
+     new->sizeof_expr = expr;
+     return new;
+}
 
+Expr *expr_sizeof_type(TypeSpec *type){
+     Expr *new= expr_new(EXPR_SIZEOF_TYPE);
+     new->sizeof_type = type;
+     return new;
+}
 
 // Print Functios [prnfunc]
 #define print_newline  printf("\n%.*s",indent,indent_string),assert(indent>=0)
@@ -582,6 +592,16 @@ void print_expr( Expr *expr ) {
                print_expr( *( expr->compound_expr.args + expr->compound_expr.num_args - 1 ) ); 
                printf(") )");
                break; 
+          case EXPR_SIZEOF_EXPR:
+               printf("(sizeof ");
+               print_expr(expr->sizeof_expr);
+               printf(")");
+               break;
+          case EXPR_SIZEOF_TYPE:
+               printf("(sizeof ");
+               print_type(expr->sizeof_type);
+               printf(")");
+               break;
           default:
                assert(0);
                break;
@@ -798,8 +818,8 @@ Stmt *stmt_assign(TokenKind op, Expr *lhs, Expr *rhs){
 }
 Stmt *stmt_init(const char *name, Expr *expr){
      Stmt *new = new_stmt(STMT_INIT);
-     new->assign_stmt.rhs = expr;
-     new->assign_stmt.name = name;
+     new->init_stmt.rhs = expr;
+     new->init_stmt.name = name;
      return new;
 }
 Stmt *stmt_for(Stmt *init, Expr *cond, Stmt *update, StmtBlock block){
