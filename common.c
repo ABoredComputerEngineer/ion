@@ -19,6 +19,7 @@ typedef enum TokenKind{
      TOKEN_GTEQ,
      TOKEN_AND,
      TOKEN_OR,
+     TOKEN_ASSIGN,
      TOKEN_ADD_ASSIGN,
      TOKEN_MUL_ASSIGN,
      TOKEN_SUB_ASSIGN,
