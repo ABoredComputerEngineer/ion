@@ -7,7 +7,7 @@ Expr *expr_name( const char *name);
 Expr *expr_unary( TokenKind op, Expr *expr);
 Expr *expr_binary( TokenKind op, Expr *left, Expr *right);
 Expr *expr_ternary( Expr *cond, Expr *then_expr, Expr *else_expr);
-Expr *expr_case( TypeSpec *type, Expr *expr);
+Expr *expr_cast( TypeSpec *type, Expr *expr);
 Expr *expr_call(Expr *operand, Expr **args, size_t num_args);
 Expr *expr_index(Expr *operand, Expr *index);
 Expr *expr_compound( TypeSpec *type, Expr **args, size_t num_args );
@@ -203,12 +203,20 @@ char *operations[] = {
      [ TOKEN_COLON_ASSIGN ] = ":=",
      [ TOKEN_INC ] = "++",
      [ TOKEN_DEC ] = "--",
-     [ '=' ] = "=",
+     [ TOKEN_ASSIGN ] = "=",
      ['+'] = "+",
      ['-'] = "-",
      [ '*' ] = "*",
      [ '/' ] = "/",
-     [ '%' ] = "%" 
+     [ '%' ] = "%" ,
+     [ '~' ] = "~",
+     [ '&' ] = "&",
+     [ '^' ] = "^",
+     [ '|' ] = "|",
+     [ '<' ] = "<",
+     [ '>' ] = ">",
+     //[ '<' ] = "<",
+     //[ '<' ] = "<",
 };
 
 void print_stmt_block(StmtBlock block,int indent){
@@ -461,6 +469,9 @@ void print_decl(Decl *decl){ // TODO : Add print StmtBlock to func declarations
      }
 }
 void print_type(TypeSpec *type){
+     if ( type == NULL ){
+          return;
+     }
      switch ( type->kind ){
           case TYPESPEC_NAME:
                printf("%s",type->name);
@@ -530,11 +541,14 @@ void print_expr( Expr *expr ) {
           case EXPR_CALL:
                printf("(");
                print_expr(expr->func_call_expr.operand);
-               for ( Expr **it = expr->func_call_expr.args; it != expr->func_call_expr.args + expr->func_call_expr.num_args; it++){
-                    printf(" ");
+               printf("(");
+               for ( Expr **it = expr->func_call_expr.args; it != expr->func_call_expr.args + expr->func_call_expr.num_args - 1; it++){
                     print_expr(*it);
+                    printf(",");
                }
+               print_expr( *(expr->func_call_expr.args+expr->func_call_expr.num_args - 1) );
                printf(")");
+               printf(") ");
                break;
           case EXPR_BINARY:
                printf("(%s ", operations[expr->op]);
@@ -561,11 +575,11 @@ void print_expr( Expr *expr ) {
                printf("( ");
                print_type(expr->compound_expr.type);
                printf(" (");
-               for ( Expr **it = expr->compound_expr.args; it != expr->compound_expr.args + expr->compound_expr.num_args; it++ ){
-                    printf(" ");
+               for ( Expr **it = expr->compound_expr.args; it != expr->compound_expr.args + expr->compound_expr.num_args - 1; it++ ){
                     print_expr(*it); 
+                    printf(" ,");
                }
-               
+               print_expr( *( expr->compound_expr.args + expr->compound_expr.num_args - 1 ) ); 
                printf(") )");
                break; 
           default:
