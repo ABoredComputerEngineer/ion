@@ -20,6 +20,7 @@ const char *do_keyword;
 const char *continue_keyword;
 const char *break_keyword;
 const char *return_keyword;
+const char *sizeof_keyword;
 
 //const char *_keyword;
 //const char *_keyword;
@@ -57,7 +58,7 @@ void init_intern_keyword(void){
      keyword_intern("return");
      keyword_intern("break");
      keyword_intern("continue");
-     //keyword_intern();
+     keyword_intern("sizeof");
      init++;
 }
 
