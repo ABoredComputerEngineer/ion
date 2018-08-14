@@ -2,6 +2,14 @@
 #define MAX(x,y) ( ( ( x ) < ( y ) )?( y ):( x ) )
 #define isOdd(x) (  ( x) & 01 )
 
+
+#define ARENA_ALIGNMENT 8
+
+#define ALIGN_DOWN(n,a) ( ( ( n ) & ~(( a )-1) ) )
+#define ALIGN_UP(n,a) ( ALIGN_DOWN(( n ) + ( a ) - 1,( a )) )
+#define ALIGN_DOWN_PTR(p,a) ( (void *)ALIGN_DOWN( (uintptr_t)( p ),( a )) )
+#define ALIGN_UP_PTR(p,a) ( (void *)ALIGN_UP((uintptr_t)( p ),( a )) ) 
+
 typedef enum TokenKind{
      TOKEN_EOF = 0,
      TOKEN_LASTCHAR = 127,
@@ -146,3 +154,107 @@ void syntax_error(const char *fmt, ... ){
      va_end(args);
      exit(1);
 }
+
+
+typedef struct Arena {
+     char *ptr; // pointer to the free area of the arena, always aligned to eight bits
+     char *end; // pointer to the end of the arena 
+     char **blocks; // pointer to the blocks where data is stored.. used to free arena
+} Arena;
+
+//#define ARENA_SIZE ( 1024 * 1024 )
+#define ARENA_SIZE 1024
+void arena_grow(Arena *arena, size_t size ){
+     size_t alloc_size = MAX( ARENA_SIZE, ALIGN_UP(size,ARENA_ALIGNMENT) );
+     arena->ptr = xmalloc( alloc_size );
+     arena->end = arena->ptr + alloc_size ;
+     assert( (size_t)(arena->end - arena->ptr) == alloc_size );
+     //assert(arena->blocks == NULL );
+     buff_push(arena->blocks,arena->ptr);
+}
+
+
+void *arena_alloc(Arena *arena,size_t size ){
+     if ( size >= ( size_t )(arena->end-arena->ptr)){
+          arena_grow(arena,size);
+          assert(size < (size_t)(arena->end-arena->ptr) );
+     }
+
+     void *ptr = arena->ptr;
+     arena->ptr = ALIGN_UP_PTR( arena->ptr + size , ARENA_ALIGNMENT );
+     assert( arena->ptr == ALIGN_DOWN_PTR(arena->ptr,ARENA_ALIGNMENT) );
+     assert( arena->ptr <= arena->end );
+     assert( ptr == ALIGN_DOWN_PTR(ptr,ARENA_ALIGNMENT) );
+     return ptr;          
+}
+
+void arena_free(Arena *arena ){
+     for ( char **it = arena->blocks ; it != arena->blocks + buff_len(arena->blocks) ; it++ ){
+          free(*it);
+     }
+     buff_free(arena->blocks);
+}
+
+
+void arena_test(void){
+     Arena arena = {};
+     arena.blocks = NULL;
+     
+     int *x = arena_alloc(&arena,sizeof(int)*20);
+     for ( int i = 0; i < 20; i++ ){
+          x[i] = i;
+     }
+     int *y = arena_alloc(&arena,sizeof(int) * 30 );
+     for ( int i = 0; i < 20 ; i++ ){
+          y[i] = 1000 + i;
+     }
+     for ( int i = 0; i < 20; i++ ){
+          printf("%d \t %d \n",x[i],y[i]);
+     }
+     arena_free(&arena);
+}
+
+// String Interning begins here
+
+Arena arena_intern;
+typedef struct Intern {
+     size_t len;
+     const char *str;
+} Intern;
+
+static Intern *intern;
+
+const char *str_intern_range( const char *start, const char *end){
+     size_t len = end - start;
+     for ( Intern *ip = intern; ip != buff_end(intern) ; ip++ ){
+          if ( ip->len == len && ( strncmp(ip->str,start,len) == 0 ) )
+               return ip->str;
+     }
+
+     char *string = arena_alloc(&arena_intern,len+1);
+     memcpy(string,start,len);
+     string[len] = 0;
+     Intern newIntern = {len,string};
+
+     buff_push(intern,newIntern );
+     return string;
+
+     
+}
+
+const char *str_intern( char *start ){
+     return str_intern_range( start, start + strlen(start) ) ;
+}
+
+void str_intern_test(void){
+     char x[] = "hello";
+     char y[] = "hello";
+     char z[] = "hellozz";
+     assert(x!=y);
+     const char *px = str_intern(x);
+     const char *py = str_intern(y);
+     const char *pz = str_intern(z);
+     assert(px == py);
+     assert( px != pz );
+}
+
