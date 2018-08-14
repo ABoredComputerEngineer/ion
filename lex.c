@@ -690,54 +690,11 @@ void expr_test(void){
 }
 #undef TOKEN_TEST
 */
-// String Interning begins here.....
 
 void init_stream( char *str){
      stream = str;
      next_token();
 }
-typedef struct Intern {
-     size_t len;
-     const char *str;
-} Intern;
-
-static Intern *intern;
-
-const char *str_intern_range( const char *start, const char *end){
-     size_t len = end - start;
-     for ( Intern *ip = intern; ip != buff_end(intern) ; ip++ ){
-          if ( ip->len == len && ( strncmp(ip->str,start,len) == 0 ) )
-               return ip->str;
-     }
-
-     char *string = xmalloc(len+1);
-     memcpy(string,start,len);
-     string[len] = 0;
-     Intern newIntern = {len,string};
-
-     buff_push(intern,newIntern );
-     return string;
-
-
-     
-}
-
-const char *str_intern( char *start ){
-     return str_intern_range( start, start + strlen(start) ) ;
-}
-
-void str_intern_test(void){
-     char x[] = "hello";
-     char y[] = "hello";
-     char z[] = "hellozz";
-     assert(x!=y);
-     const char *px = str_intern(x);
-     const char *py = str_intern(y);
-     const char *pz = str_intern(z);
-     assert(px == py);
-     assert( px != pz );
-}
-
 void print_token( Token tkn ){
      switch ( tkn.kind ){
           case TOKEN_INT:
