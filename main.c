@@ -23,6 +23,7 @@ void run_tests(void){
      lex_test();
      ast_test();
      parse_test();
+       arena_test();
 }
 
 int main(int argc, char **argv){
