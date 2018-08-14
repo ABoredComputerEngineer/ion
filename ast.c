@@ -12,11 +12,19 @@ Expr *expr_call(Expr *operand, Expr **args, size_t num_args);
 Expr *expr_index(Expr *operand, Expr *index);
 Expr *expr_compound( TypeSpec *type, Expr **args, size_t num_args );
 
+Arena arena_ast; // Memory to store all ast related objects
+
+void *ast_alloc( size_t size ){
+     void *ptr = arena_alloc(&arena_ast,size);
+     memset(ptr,0,size);
+     return ptr;
+}
 
 // TypeSpec constructors [typecon]
 
 TypeSpec *type_alloc(TypeSpecKind kind){
-     TypeSpec *new = xcalloc(1,sizeof(TypeSpec));
+     TypeSpec *new = ast_alloc(sizeof(TypeSpec));
+//     TypeSpec *new = xcalloc(1,sizeof(TypeSpec));
      new->kind = kind;
      return new;
 }
@@ -51,7 +59,8 @@ TypeSpec *type_func(TypeSpec **args,size_t num_args, TypeSpec *ret_type){
 
 
 Expr *expr_new( ExprKind kind ){
-     Expr *new_expr = xcalloc(1,sizeof(Expr));
+     Expr *new_expr = ast_alloc(sizeof(Expr));
+//     Expr *new_expr = xcalloc(1,sizeof(Expr));
      new_expr->kind = kind;
      return new_expr;
 }
@@ -613,7 +622,8 @@ void print_expr( Expr *expr ) {
 
 // Declaration constructors [declcon]
 Decl *decl_new( DeclKind kind, const char *name ){
-     Decl *new_decl = xcalloc(1,sizeof(Decl));
+//     Decl *new_decl = xcalloc(1,sizeof(Decl));
+     Decl *new_decl = ast_alloc(sizeof(Decl));
      new_decl->kind = kind;
      new_decl->name = name;
      return new_decl;
@@ -764,7 +774,8 @@ StmtBlock new_block(size_t num_stmts, Stmt **stmts){
 }
 
 Stmt *new_stmt(StmtKind kind){
-     Stmt *new = xcalloc(1,sizeof(Stmt));
+//     Stmt *new = xcalloc(1,sizeof(Stmt));
+     Stmt *new = ast_alloc(sizeof(Stmt));
      new->kind = kind;
     return new; 
 }
