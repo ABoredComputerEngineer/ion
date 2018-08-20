@@ -30,48 +30,51 @@ Expr *parse_expr_operand(){
       } else if ( is_token( TOKEN_NAME ) ){
                const char *name = token.name;
                next_token();
-               if ( match_token('{') ){
+               if ( match_token(TOKEN_LBRACE) ){
                     Expr **expr_list = NULL;
                     buff_push(expr_list,parse_expr());
-                    while ( !is_token('}') && !is_token(TOKEN_EOF) ){
-                         match_token(',');
+                    while ( !is_token(TOKEN_RBRACE) && !is_token(TOKEN_EOF) ){
+                         match_token(TOKEN_COMMA);
                          buff_push(expr_list,parse_expr());
                     }
-                    expect_token('}');
-                    return expr_compound( type_name(name),expr_list,buff_len(expr_list));
+                    expect_token(TOKEN_RBRACE);
+                    Expr **ast_expr_list = ast_dup(expr_list,buff_sizeof(expr_list));
+                    size_t len = buff_len(expr_list);
+                    //buff_free(expr_list); 
+                    return expr_compound( type_name(name),ast_expr_list,len);
                } else {
                     return expr_name(name);
                }
-      } else if ( match_token('(') ){ 
+      } else if ( match_token(TOKEN_LPAREN) ){ 
                Expr *new_expr = NULL;
-               if ( match_token(':') ){
+               if ( match_token(TOKEN_COLON) ){
                     TypeSpec *type = parse_type();
-                    expect_token(')');
+                    expect_token(TOKEN_RPAREN);
                     new_expr = parse_expr();
                     return expr_cast(type,new_expr);
                }
                new_expr = parse_expr();
-               expect_token(')');
+               expect_token(TOKEN_RPAREN);
                return new_expr;
-          } else if ( match_token('{') ){
+          } else if ( match_token(TOKEN_LBRACE) ){
                      Expr **list = NULL;
                      buff_push(list,parse_expr());
-                     while ( !is_token(TOKEN_EOF)  && !is_token('}') ){
-                          match_token(',');
+                     while ( !is_token(TOKEN_EOF)  && !is_token(TOKEN_RBRACE) ){
+                          match_token(TOKEN_COMMA);
                           buff_push(list,parse_expr());
                           
                      }
-                     expect_token('}');
+                     expect_token(TOKEN_RBRACE);
                    return expr_compound(NULL,list,buff_len(list));
-          } else if ( match_keyword("sizeof") ){
-               expect_token('(');
-               if ( match_token(':')){
+          } else if ( match_keyword(sizeof_keyword) ){
+               expect_token(TOKEN_LPAREN);
+               if ( match_token(TOKEN_COLON)){
                    TypeSpec *type = parse_type();
-                  expect_token(')');
+                  expect_token(TOKEN_RPAREN);
                  return expr_sizeof_type(type); 
                } else {
                     Expr *expr = parse_expr();
-                    expect_token(')');
+                    expect_token(TOKEN_RPAREN);
                     return expr_sizeof_expr(expr);
                }
           }
@@ -82,28 +85,33 @@ Expr *parse_expr_operand(){
 Expr **parse_expr_list(){
      Expr **list = NULL;
      buff_push(list,parse_expr());
-     while ( !is_token(TOKEN_EOF) && match_token(',') ){
+     while ( !is_token(TOKEN_EOF) && match_token(TOKEN_COMMA) ){
           buff_push(list,parse_expr());
      }
-     return list;
+     Expr **ast_expr_list = ast_dup(list,buff_sizeof(list));
+//     size_t len = buff_len(expr_list);
+     return ast_expr_list;
 }
 
 Expr *parse_expr_base(){
      Expr *operand = parse_expr_operand();
-     if ( match_token('(') ){
+     if ( match_token(TOKEN_LPAREN) ){
           Expr **expr_list = NULL;
           buff_push(expr_list,parse_expr());
-          while ( !is_token(')') && !is_token(TOKEN_EOF) ){
-               match_token(',');
+          while ( !is_token(TOKEN_RPAREN) && !is_token(TOKEN_EOF) ){
+               match_token(TOKEN_COMMA);
                buff_push(expr_list,parse_expr());
           }
      //     Expr **expr_list = parse_expr_list(); 
-          expect_token(')');
-          operand = expr_call(operand,expr_list,buff_len(expr_list));
-     } else if ( match_token('[') ){
+          expect_token(TOKEN_RPAREN);
+          Expr **ast_expr_list = ast_dup(expr_list,buff_sizeof(expr_list));
+          size_t len = buff_len(expr_list);
+          //buff_free(expr_list);
+          operand = expr_call(operand,ast_expr_list,len);
+     } else if ( match_token(TOKEN_LBRACKET) ){
           operand = expr_index(operand,parse_expr());
-          expect_token(']');
-     } else if ( match_token('.') ){
+          expect_token(TOKEN_RBRACKET);
+     } else if ( match_token(TOKEN_DOT) ){
           if ( is_token(TOKEN_STR) ){
                operand = expr_field(operand,token.str_val);
           } else {
@@ -176,9 +184,9 @@ Expr *parse_expr_or(){
 
 Expr *parse_expr_ternary(){
      Expr *ternary_expr = parse_expr_or();
-     if ( match_token('?') ){
+     if ( match_token(TOKEN_QUESTION) ){
           Expr *then_expr = parse_expr_ternary();
-          expect_token(':');
+          expect_token(TOKEN_COLON);
           Expr *else_expr = parse_expr_ternary();
           return expr_ternary(ternary_expr,then_expr,else_expr);
      } else {
@@ -206,59 +214,62 @@ TypeSpec *parse_base_type(){
           const char *name = token.name;
           next_token();
          return type_name(name) ;
-     } else if ( match_keyword("func") ){
+     } else if ( match_keyword(func_keyword) ){
           TypeSpec **type_list = NULL;
-          expect_token('(');
+          expect_token(TOKEN_LPAREN);
           buff_push(type_list,parse_type());
-          while ( !is_token(')') && !is_token(TOKEN_EOF) ){
-               expect_token(',');
+          while ( !is_token(TOKEN_RPAREN) && !is_token(TOKEN_EOF) ){
+               expect_token(TOKEN_COMMA);
                buff_push(type_list,parse_type());
           }
-          expect_token(')');
-          expect_token(':');
+          expect_token(TOKEN_RPAREN);
+          expect_token(TOKEN_COLON);
+          TypeSpec **ast_list = ast_dup(type_list,buff_sizeof(type_list));
+          size_t len = buff_len(type_list);
+          //buff_free(type_list);
           TypeSpec *ret_type = parse_type();
-          return type_func(type_list,buff_len(type_list),ret_type);
+          return type_func(ast_list,len,ret_type);
      } else {
-          expect_token('(');
+          expect_token(TOKEN_LPAREN);
           TypeSpec *type = parse_base_type();
-          expect_token(')');
+          expect_token(TOKEN_RPAREN);
           return type;
      }
 }
 
 TypeSpec *parse_type(){
      TypeSpec *type = parse_base_type();
-     if ( match_token('*') ){
+     if ( match_token(TOKEN_MUL) ){
           type = type_pointer(type);
-     } else if ( match_token('[') ){
+     } else if ( match_token(TOKEN_LBRACKET) ){
           Expr *expr = parse_expr();
           type = type_array(type,expr);
-          expect_token(']');
+          expect_token(TOKEN_RBRACKET);
      }
      return type;
 }
 
 func_param parse_func_param(){
      const char *name = parse_name();
-     expect_token(':');
+     expect_token(TOKEN_COLON);
      TypeSpec *type = parse_type(); 
      return (func_param){name,type};
 }
 
 Decl *parse_func_decl(){
      const char *name = parse_name();
-     expect_token('(');
+     expect_token(TOKEN_LPAREN);
      func_param *list = NULL;
-     if ( !is_token(')') ){
+     if ( !is_token(TOKEN_RPAREN) ){
           buff_push(list,parse_func_param());
-          while ( !is_token(')') && !is_token(TOKEN_EOF) ){
-               expect_token(',');
+          while ( !is_token(TOKEN_RPAREN) && !is_token(TOKEN_EOF) ){
+               expect_token(TOKEN_COMMA);
                buff_push(list,parse_func_param());
           }
      }
-     expect_token(')');
+     expect_token(TOKEN_RPAREN);
      TypeSpec *ret_type = NULL;
-     if ( match_token(':') ){
+     if ( match_token(TOKEN_COLON) ){
           ret_type = parse_type();// 
      }
      StmtBlock block = parse_stmt_block(); // parse block
@@ -288,7 +299,7 @@ Decl *parse_var(){
      const char *name = parse_name();
      TypeSpec *type = NULL;
      Expr *expr = NULL;
-     if ( match_token(':') ){
+     if ( match_token(TOKEN_COLON) ){
          type = parse_type();// 
      }
      if ( match_token(TOKEN_ASSIGN) ){
@@ -301,10 +312,10 @@ Decl *parse_var(){
 aggregate_item parse_aggregate_item(){
      const char **name = NULL;
      buff_push(name,parse_name());
-     while( match_token(',') ){
+     while( match_token(TOKEN_COMMA) ){
           buff_push(name,parse_name());
      }
-     expect_token(':');
+     expect_token(TOKEN_COLON);
      TypeSpec *type = parse_type();
      
      return (aggregate_item){name,buff_len(name),type};
@@ -314,10 +325,10 @@ Decl *parse_agg(StmtKind kind){
      Decl *new_agg;
      const char *name = parse_name();
      aggregate_item *list = NULL;
-     expect_token('{');
-     while ( !match_token('}') && !is_token(TOKEN_EOF) ){
+     expect_token(TOKEN_LBRACE);
+     while ( !match_token(TOKEN_RBRACE) && !is_token(TOKEN_EOF) ){
           buff_push(list,parse_aggregate_item());
-          expect_token(';');
+          expect_token(TOKEN_SEMICOLON);
      }
      new_agg = decl_aggregate(kind,name,buff_len(list),list);
      return new_agg;
@@ -343,33 +354,36 @@ enum_item parse_enum_item(){
 Decl *parse_enum(){
      Decl *new_enum = decl_new(DECL_ENUM,token.name);
      next_token(); 
-     expect_token('{');
+     expect_token(TOKEN_LBRACE);
      enum_item *enum_item_list = NULL;
-     while ( !match_token('}') ){
+     while ( !match_token(TOKEN_RBRACE) ){
           buff_push(enum_item_list,parse_enum_item());
-          match_token(',');
+          match_token(TOKEN_COMMA);
      }
-     new_enum->enum_decl.enum_items = enum_item_list;
+     new_enum->enum_decl.enum_items = ast_dup(enum_item_list,buff_sizeof(enum_item_list));
+//     new_enum->enum_decl.enum_items = enum_item_list;
+ //    new_enum->enum_decl.num_enum_items = buff_len(enum_item_list);
      new_enum->enum_decl.num_enum_items = buff_len(enum_item_list);
+     //buff_free(enum_item_list);
     return new_enum; 
 }
 
 
 Decl *parse_decl(){
      Decl *new_decl = NULL;
-     if ( match_keyword("enum") ){
+     if ( match_keyword(enum_keyword) ){
           new_decl = parse_enum();
-     } else if ( match_keyword("struct") ){
+     } else if ( match_keyword(struct_keyword) ){
           new_decl = parse_agg(DECL_STRUCT); 
-     } else if ( match_keyword("union") ){
+     } else if ( match_keyword(union_keyword) ){
           new_decl = parse_agg(DECL_UNION);
-     } else if ( match_keyword("var") ){
+     } else if ( match_keyword(var_keyword) ){
           new_decl = parse_var();
-     } else if ( match_keyword("const")) {
+     } else if ( match_keyword(const_keyword)) {
           new_decl = parse_const();
-     } else if ( match_keyword("typedef")){
+     } else if ( match_keyword(typedef_keyword)){
           new_decl = parse_typedef();
-     } else if ( match_keyword("func") ){
+     } else if ( match_keyword(func_keyword) ){
           new_decl = parse_func_decl();
      }
     return new_decl; 
@@ -383,12 +397,15 @@ StmtBlock parse_stmt_block(){
      //
      //StmtBlock block_test1 = new_block(3,stmt1 );
      StmtBlock block = {0}; 
-     expect_token('{');
-     while ( !is_token('}') && !is_token(TOKEN_EOF) ){
-          buff_push(block.stmts,parse_stmt());
+     Stmt **stmt_list = NULL;
+     expect_token(TOKEN_LBRACE);
+     while ( !is_token(TOKEN_RBRACE) && !is_token(TOKEN_EOF) ){
+          buff_push(stmt_list,parse_stmt());
      }
-     block.num_stmts = buff_len(block.stmts);
-     expect_token('}');
+     block.num_stmts = buff_len(stmt_list);
+     block.stmts = ast_dup(stmt_list,buff_sizeof(stmt_list));
+     //buff_free(stmt_list); 
+     expect_token(TOKEN_RBRACE);
      return block;
 }
 Case parse_switch_case(){
@@ -397,44 +414,49 @@ Case parse_switch_case(){
      StmtBlock block;
      Stmt **stmt_list = NULL;
      Expr **expr_list = NULL;
-     while ( match_keyword("case") ){ // allows for case 1: case 2: ...
+     while ( match_keyword(case_keyword) ){ // allows for case 1: case 2: ...
            buff_push(expr_list,parse_expr_test());
-           while ( match_token(',') ){
+           while ( match_token(TOKEN_COMMA) ){
                 buff_push(expr_list,parse_expr_test());
            }
-           expect_token(':'); 
+           expect_token(TOKEN_COLON); 
      }
-     new_case.expr_list = expr_list;
+     new_case.expr_list = ast_dup( expr_list, buff_sizeof(expr_list) );
      new_case.num_expr = buff_len(expr_list);
-     if ( match_keyword("default") ){
+     //buff_free(expr_list);
+     if ( match_keyword(default_keyword) ){
           if ( is_default ){
                syntax_error("Cant have duplicate definitions of default in same case\n");
           }
           is_default = true;
           new_case.isdefault = true;
-          expect_token(':');
+          expect_token(TOKEN_COLON);
      }
-     while ( !is_token(TOKEN_EOF) && !is_token('}') && !is_keyword("case") && !is_keyword("default") ){
+     while ( !is_token(TOKEN_EOF) && !is_token(TOKEN_RBRACE) && !is_keyword(case_keyword) && !is_keyword(default_keyword) ){
           buff_push(stmt_list,parse_stmt());
      }
-     block.stmts = stmt_list;
+     block.stmts = ast_dup(stmt_list,buff_sizeof(stmt_list));
      block.num_stmts = buff_len(stmt_list);
      new_case.case_block = block;
+     //buff_free(stmt_list);
      return new_case;
      
 }
 Stmt *parse_stmt_switch(){
-     expect_token('(');
+     expect_token(TOKEN_LPAREN);
      //parse expr
      Expr *expr = parse_expr();
-     expect_token(')');
-     expect_token('{');
+     expect_token(TOKEN_RPAREN);
+     expect_token(TOKEN_LBRACE);
      Case *case_list = NULL;
-     while ( !is_token('}') && !is_token(TOKEN_EOF) ){
+     while ( !is_token(TOKEN_RBRACE) && !is_token(TOKEN_EOF) ){
           buff_push(case_list,parse_switch_case());
      }
-     expect_token('}');
-     return stmt_switch(expr,buff_len(case_list),case_list);
+     expect_token(TOKEN_RBRACE);
+     Case *ast_list= ast_dup(case_list,buff_sizeof(case_list));
+     size_t len = buff_len(case_list);
+     //buff_free(case_list);
+     return stmt_switch(expr,len,ast_list);
 }
 
 Stmt *parse_stmt_simple(){
@@ -464,64 +486,64 @@ Stmt *parse_stmt_simple(){
      }
 }
 Stmt *parse_stmt_for(){
-     expect_token('(');
+     expect_token(TOKEN_LPAREN);
      Stmt *init = NULL;
      init = parse_stmt_simple();
-     expect_token(';');
+     expect_token(TOKEN_SEMICOLON);
      Expr *cond = NULL;
-     if ( !is_token(';') ){
+     if ( !is_token(TOKEN_SEMICOLON) ){
           cond = parse_expr();
      }
-    expect_token(';');
+    expect_token(TOKEN_SEMICOLON);
     Stmt *update = NULL;
-    if ( !is_token(')') ){
+    if ( !is_token(TOKEN_RPAREN) ){
          update = parse_stmt_simple();
          if ( update->kind == STMT_INIT){
               syntax_error("Initialization is not allowed in for loop\n");
          }
     }
-    expect_token(')');
+    expect_token(TOKEN_RPAREN);
     StmtBlock block = parse_stmt_block();
     return stmt_for(init,cond,update,block);
 }
 Stmt *parse_stmt_while(){
-     expect_token('(');
+     expect_token(TOKEN_LPAREN);
      //parse expr
      
      Expr *cond = parse_expr();
-     expect_token(')');
+     expect_token(TOKEN_RPAREN);
      StmtBlock block = parse_stmt_block();
      return stmt_while(cond,block);
 }
 
 Stmt *parse_stmt_do_while(){
      StmtBlock block  = parse_stmt_block();
-     expect_keyword("while");
-     expect_token('(');
+     expect_keyword(while_keyword);
+     expect_token(TOKEN_LPAREN);
      // parse expr
      
      Expr *cond = parse_expr();
-     expect_token(')'); 
-     expect_token(';');
+     expect_token(TOKEN_RPAREN); 
+     expect_token(TOKEN_SEMICOLON);
      return stmt_do_while(cond,block);
 }
 
 Stmt *parse_stmt_if(){
-     expect_token('(');
+     expect_token(TOKEN_LPAREN);
      // parse expr
      Expr *expr = parse_expr();
-     expect_token(')');
+     expect_token(TOKEN_RPAREN);
      StmtBlock if_block = parse_stmt_block();
      Elseif *elseifs = NULL;
      Elseif temp;
      StmtBlock block_elseif; 
      StmtBlock else_block={};
-     while ( match_keyword("else") ){
-          if ( match_keyword("if") ){
-               expect_token('(');
+     while ( match_keyword(else_keyword) ){
+          if ( match_keyword(if_keyword) ){
+               expect_token(TOKEN_LPAREN);
                // parse expr
                expr = parse_expr();
-               expect_token(')');
+               expect_token(TOKEN_RPAREN);
                block_elseif = parse_stmt_block();
                temp = (Elseif){expr,block_elseif};
                buff_push(elseifs,temp); 
@@ -535,40 +557,41 @@ Stmt *parse_stmt_if(){
 }
 
 Stmt *parse_return_stmt(){
-     // parse expr
-     Expr *expr = parse_expr();
-     //if ( is_token(TOKEN_NAME) ){
-     //     expr = expr_name(parse_name());
-     //} else if ( is_token(TOKEN_INT) ){
-     //     expr = expr_int(token.int_val);
-     //}
-     expect_token(';');
+     Expr *expr = NULL;
+     if ( !is_token(TOKEN_SEMICOLON) ){
+          expr = parse_expr();
+     }
+     expect_token(TOKEN_SEMICOLON);
      return  stmt_return(expr);
 }
 
 Stmt *parse_stmt(){
-     if ( match_keyword("return") ){
+     if ( match_keyword(return_keyword) ){
           return parse_return_stmt();
-     } else if ( match_keyword("if") ){
+     } else if ( match_keyword(if_keyword) ){
           return parse_stmt_if();
-     } else if ( match_keyword("while") ){
+     } else if ( match_keyword(while_keyword) ){
           return parse_stmt_while();
-     } else if ( match_keyword("for") ){
+     } else if ( match_keyword(for_keyword) ){
           return parse_stmt_for();
-     } else if ( match_keyword("do") ){
+     } else if ( match_keyword(do_keyword) ){
           return parse_stmt_do_while();
-     } else if ( match_keyword("switch") ){
+     } else if ( match_keyword(switch_keyword) ){
           return parse_stmt_switch();
-     } else if ( match_keyword("break") ){
-          expect_token(';');
+     } else if ( match_keyword(break_keyword) ){
+          expect_token(TOKEN_SEMICOLON);
           return stmt_break();
-     } else if ( match_keyword("continue") ){
-          expect_token(';');
+     } else if ( match_keyword(continue_keyword) ){
+          expect_token(TOKEN_SEMICOLON);
           return stmt_continue();
+     } else if ( is_decl_keyword() ){
+          Decl *decl = parse_decl();
+          expect_token(TOKEN_SEMICOLON);
+          return stmt_decl(decl);
      } else {
           // parse expr
           Stmt *new = parse_stmt_simple();
-          expect_token(';'); 
+          expect_token(TOKEN_SEMICOLON); 
           return new;
      }
 }
@@ -576,8 +599,9 @@ Stmt *parse_stmt(){
 
 void parse_test(){
      init_intern_keyword();
-     assert(is_token_keyword("typedef"));
+     assert(is_token_keyword(typedef_keyword));
      assert( !is_token_keyword("fucnthisshit"));
+     use_buff_print = true;
      char *parse_string[] = {
           "var x:(func (char,char):int) = 12",
           "enum abc { FUCK, THIS = 23, SHIT, YOU = 12, FUCKING= 14, ASS = 9}",
@@ -598,10 +622,10 @@ void parse_test(){
         "func do_while(a:char,b:char):int{do { continue; }while(x!=2);}",
         "func foo (a:char*,b:size_t):char*{break;continue;}",
           "func foo (a:char,b:char):int{for(i:=0;x;i++){continue;}}", 
-            "func foo (a:char,b:char):int{for(i:=0;x;i++){switch ( o ){ case a,b,c:x+=1 ;break; case b:case c: break; default:break;}}}" ,
+          "func foo (a:char,b:char):int{for(i:=0;x;i++){switch ( o ){ case a,b,c:x+=1 ;break; case b:case c: break; default:break;}}}" ,
          "func foo (a:int):int{ x:=x+2; }",
-         "func foo (a:int):int{ x = y==2 ? a : b(~x,*y); }"
-         " func foo (a:int *):int{ x <<= *x+2*3 ;}"
+         "func foo (a:int):int{ x = y==2 ? a : b(~x,*y); }",
+         " func foo (a:int *):int{ x <<= *x+2*3 ;}",
          " func fact(n:int):int { trace(\"fact\"); if ( n== 0 ){return 1;} else { return n*fact(n-1);}}",
          "func fact(n:int):int { p := 1; for(i:=1; i<=n; i++){p*=1;} return p;}",
           " var foo = a?a&b + c<<d + e*f == +u-v-w + *g/h(x,y) + -i%k[x] && m<=n*(p+q/r) : 0",
@@ -617,8 +641,10 @@ void parse_test(){
           "func fact(x:int):int{while(x!=1){product*=x;x = x - 1 ;}}",
           "const x = sizeof(:int)",
           "var x:int = sizeof(3)",
+          "func addx(x:int):int{var y:int= 2; x+=2 ; return x ;}",
+          "func addx(x:int):int{var y:int= 2; x+=2 ; return ;}"
           //"var x = ",
-          "func fact(x:int):int{2;}"
+         // "func fact(x:int):int{2;}"
                
      };
      Decl *temp_decl; 
@@ -626,7 +652,8 @@ void parse_test(){
           init_stream(*it);
           temp_decl = parse_decl();
           print_decl(temp_decl);
-          putchar('\n');
+          printf("\n");
      }
+     flush_print_buff(stdout);
 
 }
