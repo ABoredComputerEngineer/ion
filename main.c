@@ -13,6 +13,7 @@
 
 #include "common.c"
 #include "lex.c"
+#include "print.c"
 #include "ast.c"
 #include "parse.c"
 
@@ -21,9 +22,9 @@ void run_tests(void){
      buff_test();
      str_intern_test();
      lex_test();
-     ast_test();
+//     arena_test();
+ //    ast_test();
      parse_test();
-       arena_test();
 }
 
 int main(int argc, char **argv){
