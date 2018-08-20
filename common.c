@@ -10,60 +10,6 @@
 #define ALIGN_DOWN_PTR(p,a) ( (void *)ALIGN_DOWN( (uintptr_t)( p ),( a )) )
 #define ALIGN_UP_PTR(p,a) ( (void *)ALIGN_UP((uintptr_t)( p ),( a )) ) 
 
-typedef enum TokenKind{
-     TOKEN_EOF = 0,
-     TOKEN_LASTCHAR = 127,
-     TOKEN_INT = 128,
-     TOKEN_FLOAT,
-     TOKEN_STR,
-     TOKEN_NAME,
-     TOKEN_INC,
-     TOKEN_DEC,
-     TOKEN_LSHIFT,
-     TOKEN_RSHIFT,
-     TOKEN_EQ,
-     TOKEN_NOTEQ,
-     TOKEN_LTEQ,
-     TOKEN_GTEQ,
-     TOKEN_AND,
-     TOKEN_OR,
-     TOKEN_ASSIGN,
-     TOKEN_ADD_ASSIGN,
-     TOKEN_MUL_ASSIGN,
-     TOKEN_SUB_ASSIGN,
-     TOKEN_DIV_ASSIGN,
-     TOKEN_MOD_ASSIGN,
-     TOKEN_AND_ASSIGN,
-     TOKEN_OR_ASSIGN,
-     TOKEN_XOR_ASSIGN,
-     TOKEN_LSHIFT_ASSIGN,
-     TOKEN_RSHIFT_ASSIGN,
-     TOKEN_COLON_ASSIGN,
-     TOKEN_KEYWORD
-} TokenKind;
-
-typedef enum TokenMod{
-     TOKENMOD_NONE = 0,
-     TOKENMOD_HEX,
-     TOKENMOD_DEC,
-     TOKENMOD_OCT,
-     TOKENMOD_BIN,
-     TOKENMOD_CHAR
-} TokenMod;
-
-typedef struct Token {
-     TokenKind kind;
-     TokenMod mod;
-     char *start;
-     char *end;
-     union {
-          uint64_t int_val;
-          double float_val;
-          const char *str_val;
-          const char *name;
-     };
-} Token;
-
 typedef struct buffHdr {
      size_t len;
      size_t cap;
@@ -82,7 +28,10 @@ typedef struct buffHdr {
 
 #define buff_push(b,...) ( buff_fit(( b ),1) , (b)[buff_hdr(( b ))->len++] = ( __VA_ARGS__ )  )
 #define buff_free(b) ( (( b ))?free(buff_hdr(( b ))):0 )
+#define buff_sizeof(b) ( (b)?buff_len(b)*sizeof(*b):0 )
 
+#define buff_printf(b,...) ( (b) = print_buff( (b) , __VA_ARGS__ ) )
+#define buff_clear(b) ( (b)?buff_hdr(b)->len = 0:0 )
 void *xmalloc(size_t size){
      void *p = malloc(size);
      if ( p ){
@@ -116,9 +65,11 @@ void fatal(const char *format, ... ){
      va_end(args);
 }
 
+#define MIN_BUFF_SIZE 16 // the minimum amount of size to request to buffer
+
 void *buff_grow(const void *buff, size_t new_len, size_t elem_size ){
      assert( buff_cap(buff) <= (SIZE_MAX-1)/2 );
-     size_t new_cap = MAX( 1 + 2 * buff_cap(buff), new_len);
+     size_t new_cap = MAX( 1 + 2 * buff_cap(buff), MAX(new_len,MIN_BUFF_SIZE));
      assert(new_len<=new_cap);
      assert(new_cap <= ( SIZE_MAX - offsetof(buffHdr,buf) )/elem_size); // new size of the buffer must be smaller than the maximum size of bufer allowed 
      size_t new_size = offsetof(buffHdr,buf) + elem_size*new_cap;
@@ -134,6 +85,33 @@ void *buff_grow(const void *buff, size_t new_len, size_t elem_size ){
      newBuff->cap = new_cap;
      return newBuff->buf;
 }
+#undef MIN_BUFF_SIZE
+
+char *print_buff(char *buffer, const char *fmt,...){
+     va_list args;
+     va_start(args,fmt);
+     char *dest = buff_end(buffer) ; // dest points to the character NULL  of the string
+     size_t cap = buff_cap(buffer) - buff_len(buffer) * sizeof(*buffer);
+     size_t new = 1 + vsnprintf(dest,cap,fmt,args);
+     size_t len = buff_len(buffer);
+     size_t buff_cap = buff_cap(buffer);
+
+     va_end(args);
+     if ( new > cap ){
+          va_start(args,fmt);
+          buff_fit(buffer,new); // increases the size of buffer to fit new string
+     len = buff_len(buffer);
+     buff_cap = buff_cap(buffer);
+          cap = buff_cap(buffer)-buff_len(buffer)*sizeof(*buffer);
+          dest = buff_end(buffer) ;
+          new = 1+vsnprintf(dest,cap,fmt,args);
+          assert(new<cap);
+     }
+     buff_hdr(buffer)->len += new-1;
+     return buffer;
+}
+
+
 
 void buff_test(void){
      int *xz = NULL; 
@@ -143,6 +121,12 @@ void buff_test(void){
      for ( int j = 0; j < 20; j++){
           assert(xz[j] == j );
      }
+
+     char *str = NULL;
+     buff_printf(str,"%d for all \n",1);
+     buff_printf(str,"%s\n","fucc this shit");
+     printf("%s",str);
+     assert(  str[strlen(str)] == 0 );
      return;
 }
 
@@ -154,6 +138,9 @@ void syntax_error(const char *fmt, ... ){
      va_end(args);
      exit(1);
 }
+
+
+
 
 
 typedef struct Arena {
@@ -216,6 +203,8 @@ void arena_test(void){
 
 // String Interning begins here
 
+const char *str_intern(const char *);
+const char *str_intern_range( const char *start, const char *end);
 Arena arena_intern;
 typedef struct Intern {
      size_t len;
@@ -242,7 +231,7 @@ const char *str_intern_range( const char *start, const char *end){
      
 }
 
-const char *str_intern( char *start ){
+const char *str_intern( const char *start ){
      return str_intern_range( start, start + strlen(start) ) ;
 }
 
