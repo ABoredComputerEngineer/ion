@@ -81,7 +81,8 @@ typedef enum StmtKind {
      STMT_RETURN,
      STMT_BREAK,
      STMT_CONTINUE,
-     STMT_BLOCK
+     STMT_BLOCK,
+     STMT_DECL
 } StmtKind;
 
 typedef struct enum_item{
@@ -292,6 +293,7 @@ struct Stmt{
           stmt_assign_def assign_stmt;
           Expr *expr_stmt;
           StmtBlock block;
+          Decl *decl_stmt;
      };
 
 };
