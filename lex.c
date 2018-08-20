@@ -1,7 +1,87 @@
-const char *str_intern(char *);
-const char *str_intern_range( const char *start, const char *end);
+typedef enum TokenKind{
+     TOKEN_EOF = 0,
+     TOKEN_LASTCHAR = 127,
+     TOKEN_LPAREN,
+     TOKEN_RPAREN,
+     TOKEN_LBRACE,
+     TOKEN_RBRACE,
+     TOKEN_LBRACKET,
+     TOKEN_RBRACKET,
+     TOKEN_DOT,
+     TOKEN_QUESTION,
+     TOKEN_COLON,
+     TOKEN_COMMA,
+     TOKEN_SEMICOLON,
+     TOKEN_INT,
+     TOKEN_FLOAT,
+     TOKEN_STR,
+     TOKEN_NAME,
+     TOKEN_INC,
+     TOKEN_DEC,
+     // Multiplication opertors
+     TOKEN_MUL,
+     TOKEN_MOD,
+     TOKEN_DIV,
+     TOKEN_BAND,
+     TOKEN_LSHIFT,
+     TOKEN_RSHIFT,
+    // Addition operators 
+     TOKEN_ADD,
+     TOKEN_XOR,
+     TOKEN_SUB,
+     TOKEN_BOR,
+     // Comparison operators
+     TOKEN_EQ,
+     TOKEN_NOTEQ,
+     TOKEN_LTEQ,
+     TOKEN_GTEQ,
+     TOKEN_AND,
+     TOKEN_OR,
+     TOKEN_LT,
+     TOKEN_GT,
+     // Assignment operators
+     TOKEN_ASSIGN,
+     TOKEN_ADD_ASSIGN,
+     TOKEN_MUL_ASSIGN,
+     TOKEN_SUB_ASSIGN,
+     TOKEN_DIV_ASSIGN,
+     TOKEN_MOD_ASSIGN,
+     TOKEN_AND_ASSIGN,
+     TOKEN_OR_ASSIGN,
+     TOKEN_XOR_ASSIGN,
+     TOKEN_LSHIFT_ASSIGN,
+     TOKEN_RSHIFT_ASSIGN,
+     TOKEN_COLON_ASSIGN,
+     TOKEN_KEYWORD,
+     // Unary Operators
+     TOKEN_NOT,
+     TOKEN_COMPLEMENT
+} TokenKind;
+
+typedef enum TokenMod{
+     TOKENMOD_NONE = 0,
+     TOKENMOD_HEX,
+     TOKENMOD_DEC,
+     TOKENMOD_OCT,
+     TOKENMOD_BIN,
+     TOKENMOD_CHAR
+} TokenMod;
+
+typedef struct Token {
+     TokenKind kind;
+     TokenMod mod;
+     char *start;
+     char *end;
+     union {
+          uint64_t int_val;
+          double float_val;
+          const char *str_val;
+          const char *name;
+     };
+} Token;
+
 bool is_token_keyword(const char *);
-const char *tyepdef_keyword;
+const char *typedef_keyword;
 const char *const_keyword;
 const char *var_keyword;
 const char *enum_keyword;
@@ -21,12 +101,13 @@ const char *continue_keyword;
 const char *break_keyword;
 const char *return_keyword;
 const char *sizeof_keyword;
-
+const char *first_keyword;
+const char *last_keyword;
 //const char *_keyword;
 //const char *_keyword;
 const char **keywords = NULL;
 
-//#define keyword_intern(x) ( #x_keyword  = str_intern(#x); buff_push(keywords,#x_keyword) )
+//#define keyword_intern(name)  name##_keyword  = str_intern(#name); buff_push(keywords,name##_keyword) 
 
 void keyword_intern(char *key ){
      const char *x = str_intern(key);
@@ -39,36 +120,51 @@ void init_intern_keyword(void){
      if ( init ){
          return;
      } 
-     keyword_intern("typedef");
-     keyword_intern("const");
-     keyword_intern("var");
-     keyword_intern("enum");
-     keyword_intern("struct");
-     keyword_intern("union");
-     keyword_intern("func");
-     keyword_intern("if");
-     keyword_intern("then");
-     keyword_intern("else");
-     keyword_intern("switch");
-     keyword_intern("case");
-     keyword_intern("default");
-     keyword_intern("while");
-     keyword_intern("for");
-     keyword_intern("do");
-     keyword_intern("return");
-     keyword_intern("break");
-     keyword_intern("continue");
-     keyword_intern("sizeof");
+     typedef_keyword  = str_intern("typedef"); buff_push(keywords,typedef_keyword); 
+     const_keyword  = str_intern("const"); buff_push(keywords,const_keyword); 
+     var_keyword  = str_intern("var"); buff_push(keywords,var_keyword); 
+     enum_keyword  = str_intern("enum"); buff_push(keywords,enum_keyword); 
+     struct_keyword  = str_intern("struct"); buff_push(keywords,struct_keyword); 
+     union_keyword  = str_intern("union"); buff_push(keywords,union_keyword); 
+     func_keyword  = str_intern("func"); buff_push(keywords,func_keyword); 
+     if_keyword  = str_intern("if"); buff_push(keywords,if_keyword); 
+     then_keyword  = str_intern("then"); buff_push(keywords,then_keyword); 
+     else_keyword  = str_intern("else"); buff_push(keywords,else_keyword); 
+     switch_keyword  = str_intern("switch"); buff_push(keywords,switch_keyword); 
+     case_keyword  = str_intern("case"); buff_push(keywords,case_keyword); 
+     default_keyword  = str_intern("default"); buff_push(keywords,default_keyword); 
+     while_keyword  = str_intern("while"); buff_push(keywords,while_keyword); 
+     for_keyword  = str_intern("for"); buff_push(keywords,for_keyword); 
+     do_keyword  = str_intern("do"); buff_push(keywords,do_keyword); 
+     return_keyword  = str_intern("return"); buff_push(keywords,return_keyword); 
+     break_keyword  = str_intern("break"); buff_push(keywords,break_keyword); 
+     continue_keyword  = str_intern("continue"); buff_push(keywords,continue_keyword); 
+     sizeof_keyword  = str_intern("sizeof"); buff_push(keywords,sizeof_keyword); 
+     first_keyword = typedef_keyword;
+     last_keyword = sizeof_keyword;
+     assert(first_keyword < last_keyword );
+  //_keyword  = str_intern(#name); buff_push(keywords,name##_keyword) 
+  //_keyword  = str_intern(#name); buff_push(keywords,name##_keyword) 
+  //   keyword_intern("default");
+  //   keyword_intern("while");
+  //   keyword_intern("for");
+  //   keyword_intern("do");
+  //   keyword_intern("return");
+  //   keyword_intern("break");
+  //   keyword_intern("continue");
+  //   keyword_intern("sizeof");
      init++;
 }
 
 bool is_token_keyword(const char *key ){
-     for ( const char **it = keywords; it != keywords + buff_len(keywords); it++ ){
-          if ( strcmp(key,*it )  == 0 )
-               return true;
-     }
-     return false;
+  //   for ( const char **it = keywords; it != keywords + buff_len(keywords); it++ ){
+  //        if ( strcmp(key,*it )  == 0 )
+  //             return true;
+  //   }
+  //   return false;
+     return ( key >= first_keyword && key <= last_keyword );
 }
+
 
 
 char *stream;
@@ -241,24 +337,32 @@ void scan_str(void){
 }
 
 
-#define TOKEN_CASE1(c,c1,k1) \
+#define TOKEN_CASE1(c,k) \
      case c:\
-     token.kind = *stream++;\
+     token.kind = k;\
+     stream++;\
+     break;\
+
+#define TOKEN_CASE2(c,k,c1,k1) \
+     case c:\
+     token.kind = k;\
+     stream++;\
      if ( *stream == c1 ) {\
-          token.kind = k1;\
           stream++;\
+          token.kind = k1;\
      }\
      break;
 
-#define TOKEN_CASE2(c,c1,k1,c2,k2) \
+#define TOKEN_CASE3(c,k,c1,k1,c2,k2)\
      case c:\
-     token.kind = *stream++;\
-     if ( *stream == c1 ) {\
-          stream++;\
+     token.kind = k;\
+     stream++;\
+     if ( *stream == c1 ){\
           token.kind = k1;\
-     } else if ( *stream == c2 ) {\
           stream++;\
+     } else if ( *stream == c2 ){\
           token.kind = k2;\
+          stream++;\
      }\
      break;
 
@@ -273,6 +377,7 @@ top:
                goto top;
                break;
           case '.':
+               token.kind = TOKEN_DOT;
                scan_float();
                break;
           case '\'':
@@ -304,17 +409,31 @@ top:
      break;
 
  */
-          TOKEN_CASE2('+','=',TOKEN_ADD_ASSIGN,'+',TOKEN_INC)
-          TOKEN_CASE2('-','=',TOKEN_SUB_ASSIGN,'-',TOKEN_DEC)
-          TOKEN_CASE1('*','=',TOKEN_MUL_ASSIGN)
-          TOKEN_CASE1('/','=',TOKEN_DIV_ASSIGN)
-          TOKEN_CASE1('%','=',TOKEN_MOD_ASSIGN)
-          TOKEN_CASE1('^','=',TOKEN_XOR_ASSIGN)
-          TOKEN_CASE2('|','=',TOKEN_OR_ASSIGN,'|',TOKEN_OR)
-          TOKEN_CASE2('&','=',TOKEN_AND_ASSIGN,'&',TOKEN_AND)
+          TOKEN_CASE3('+',TOKEN_ADD,'=',TOKEN_ADD_ASSIGN,'+',TOKEN_INC)
+          TOKEN_CASE3('-',TOKEN_SUB,'=',TOKEN_SUB_ASSIGN,'-',TOKEN_DEC)
+          TOKEN_CASE2('*',TOKEN_MUL,'=',TOKEN_MUL_ASSIGN)
+          TOKEN_CASE2('/',TOKEN_DIV,'=',TOKEN_DIV_ASSIGN)
+          TOKEN_CASE2('%',TOKEN_MOD,'=',TOKEN_MOD_ASSIGN)
+          TOKEN_CASE2('^',TOKEN_XOR,'=',TOKEN_XOR_ASSIGN)
+          TOKEN_CASE3('|',TOKEN_OR,'=',TOKEN_OR_ASSIGN,'|',TOKEN_OR)
+          TOKEN_CASE3('&',TOKEN_BAND,'=',TOKEN_AND_ASSIGN,'&',TOKEN_AND)
           //TOKEN_CASE1('=','=',TOKEN_EQ)
-          TOKEN_CASE1('!','=',TOKEN_NOTEQ)
-          TOKEN_CASE1(':','=',TOKEN_COLON_ASSIGN);     
+          TOKEN_CASE2('!',TOKEN_NOT,'=',TOKEN_NOTEQ)
+          TOKEN_CASE2(':',TOKEN_COLON,'=',TOKEN_COLON_ASSIGN) 
+          TOKEN_CASE1('(',TOKEN_LPAREN)    
+          TOKEN_CASE1(')',TOKEN_RPAREN)    
+          TOKEN_CASE1('{',TOKEN_LBRACE)    
+          TOKEN_CASE1('}',TOKEN_RBRACE)    
+          TOKEN_CASE1('[',TOKEN_LBRACKET)    
+          TOKEN_CASE1(']',TOKEN_RBRACKET)    
+          TOKEN_CASE1(';',TOKEN_SEMICOLON)    
+          TOKEN_CASE1(',',TOKEN_COMMA)    
+          TOKEN_CASE1('?',TOKEN_QUESTION)   
+          TOKEN_CASE1('~',TOKEN_COMPLEMENT) 
+          //TOKEN_CASE1('.',TOKEN_DOT)    
+          //TOKEN_CASE1('{',TOKEN_LPAREN)    
+          //TOKEN_CASE1('{',TOKEN_LPAREN)  
+          TOKEN_CASE1(0,TOKEN_EOF) 
           case '=':
                token.kind = TOKEN_ASSIGN;
                stream++;
@@ -324,7 +443,8 @@ top:
                }
                break;
           case '<':
-               token.kind = *stream++;
+               token.kind = TOKEN_LT;
+               stream++;
                if ( *stream == '<' ){
                    token.kind = TOKEN_LSHIFT;
                    stream++;
@@ -338,7 +458,8 @@ top:
                }
                break;
           case '>':
-               token.kind = *stream++;
+               token.kind = TOKEN_GT;
+               stream++;
                if ( *stream == '>' ){
                    token.kind = TOKEN_RSHIFT;
                    stream++;
@@ -446,18 +567,21 @@ bool is_assign_op(){
 }
 
 bool is_unary_op(){
-     return token.kind == '*' || token.kind == '~' || token.kind == '&' || token.kind == '-'|| token.kind =='+';
+     return token.kind == TOKEN_MUL || token.kind == TOKEN_COMPLEMENT || token.kind == TOKEN_BAND || token.kind == TOKEN_SUB|| token.kind == TOKEN_ADD;
 }
 
 bool is_mul_op(){
-     return token.kind == '*' || token.kind == '/' || token.kind == TOKEN_LSHIFT || token.kind == TOKEN_RSHIFT || token.kind == '&' || token.kind == '%';
+     //return token.kind == '*' || token.kind == '/' || token.kind == TOKEN_LSHIFT || token.kind == TOKEN_RSHIFT || token.kind == '&' || token.kind == '%';
+     return token.kind >= TOKEN_MUL && token.kind <= TOKEN_RSHIFT ; 
 }
 bool is_add_op(){
-     return token.kind == '+' || token.kind == '-' || token.kind == '|' ;
+     return token.kind >= TOKEN_ADD && token.kind <= TOKEN_BOR;
+ //    return token.kind == '+' || token.kind == '-' || token.kind == '|' ;
 }
 
 bool is_comp_op(){
-     return token.kind == TOKEN_EQ || token.kind == TOKEN_NOTEQ || token.kind == TOKEN_LTEQ || token.kind == TOKEN_GTEQ || token.kind == '<' || token.kind == '>';
+     return token.kind >= TOKEN_EQ && token.kind <= TOKEN_GT;
+//     return token.kind == TOKEN_EQ || token.kind == TOKEN_NOTEQ || token.kind == TOKEN_LTEQ || token.kind == TOKEN_GTEQ || token.kind == '<' || token.kind == '>';
 }
 
 bool is_token_name(const char *name){ 
@@ -476,8 +600,10 @@ bool match_token(TokenKind kind){
 }
 
 
-bool match_keyword(char *x){
-     if ( token.kind == TOKEN_KEYWORD && strcmp(token.name,x) == 0 ){
+bool match_keyword(const char *x){
+
+    //if ( token.kind == TOKEN_KEYWORD && strcmp(token.name,x) == 0 ){
+     if ( token.kind == TOKEN_KEYWORD && token.name ==(x) ){  
           next_token();
           return true;
      } else {
@@ -485,7 +611,7 @@ bool match_keyword(char *x){
      }
 }
 
-bool expect_keyword(char *x){
+bool expect_keyword(const char *x){
      if ( match_keyword(x) ){
           return true;
      } else {
@@ -493,6 +619,10 @@ bool expect_keyword(char *x){
           exit(1);
      }
      return false;
+}
+
+bool is_decl_keyword(){
+     return ( token.kind == TOKEN_KEYWORD && (token.name>=typedef_keyword && token.name <= union_keyword) );
 }
 
 //char *token_kind_name(TokenKind kind){
