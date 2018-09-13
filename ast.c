@@ -33,7 +33,7 @@ void *ast_dup(const void *buffer, size_t size){
 
 // TypeSpec constructors [typecon]
 
-TypeSpec *type_alloc(TypeSpecKind kind){
+TypeSpec *typespec_alloc(TypeSpecKind kind){
      TypeSpec *new = ast_alloc(sizeof(TypeSpec));
 //     TypeSpec *new = xcalloc(1,sizeof(TypeSpec));
      new->kind = kind;
@@ -41,30 +41,30 @@ TypeSpec *type_alloc(TypeSpecKind kind){
 }
 
 TypeSpec *type_name(const char *name){
-     TypeSpec *new_type =  type_alloc(TYPESPEC_NAME);
+     TypeSpec *new_type =  typespec_alloc(TYPESPEC_NAME);
      new_type->name = name;
      return new_type;
 }
 
 TypeSpec *type_array(TypeSpec *base, Expr *size){
-     TypeSpec *new_type = type_alloc(TYPESPEC_ARRAY);
-     new_type->base_type = base;
-     new_type->size = size;
+     TypeSpec *new_type = typespec_alloc(TYPESPEC_ARRAY);
+     new_type->array.base_type = base;
+     new_type->array.size = size;
      return new_type;
 }
 TypeSpec *type_pointer(TypeSpec *base){
-     TypeSpec *new_type = type_alloc(TYPESPEC_POINTER);
-     new_type->base_type = base;
+     TypeSpec *new_type = typespec_alloc(TYPESPEC_POINTER);
+     new_type->ptr.base_type = base;
      return new_type;
 }
 
     // BUF( TypeSpec **args;) // Buffer to hold the data type of arguments given to a function ) )
     // TypeSpec *ret_type; // The return type of the function
 TypeSpec *type_func(TypeSpec **args,size_t num_args, TypeSpec *ret_type){
-     TypeSpec *new_type = type_alloc(TYPESPEC_FUNC);
-     new_type->func_decl.args = args;
-     new_type->func_decl.num_args = num_args;
-     new_type->func_decl.ret_type = ret_type;
+     TypeSpec *new_type = typespec_alloc(TYPESPEC_FUNC);
+     new_type->func.args = args;
+     new_type->func.num_args = num_args;
+     new_type->func.ret_type = ret_type;
      return new_type;
 }
 
