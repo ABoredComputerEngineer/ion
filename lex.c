@@ -111,7 +111,6 @@ const char **keywords = NULL;
 
 void keyword_intern(char *key ){
      const char *x = str_intern(key);
-
      buff_push(keywords,x);
 }
 
@@ -245,7 +244,12 @@ void scan_int(void){
 
 void scan_float(void){
      const char *start = stream;
-
+     if ( *stream == '.' ){
+          if ( !isdigit(*(stream+1)) ){
+               stream++;
+               return;
+          }
+     } 
      while ( isdigit(*stream) ){
           stream++;
      }
