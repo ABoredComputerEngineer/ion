@@ -40,19 +40,19 @@ TypeSpec *typespec_alloc(TypeSpecKind kind){
      return new;
 }
 
-TypeSpec *type_name(const char *name){
+TypeSpec *typespec_name(const char *name){
      TypeSpec *new_type =  typespec_alloc(TYPESPEC_NAME);
      new_type->name = name;
      return new_type;
 }
 
-TypeSpec *type_array(TypeSpec *base, Expr *size){
+TypeSpec *typespec_array(TypeSpec *base, Expr *size){
      TypeSpec *new_type = typespec_alloc(TYPESPEC_ARRAY);
      new_type->array.base_type = base;
      new_type->array.size = size;
      return new_type;
 }
-TypeSpec *type_pointer(TypeSpec *base){
+TypeSpec *typespec_pointer(TypeSpec *base){
      TypeSpec *new_type = typespec_alloc(TYPESPEC_POINTER);
      new_type->ptr.base_type = base;
      return new_type;
@@ -60,7 +60,7 @@ TypeSpec *type_pointer(TypeSpec *base){
 
     // BUF( TypeSpec **args;) // Buffer to hold the data type of arguments given to a function ) )
     // TypeSpec *ret_type; // The return type of the function
-TypeSpec *type_func(TypeSpec **args,size_t num_args, TypeSpec *ret_type){
+TypeSpec *typespec_func(TypeSpec **args,size_t num_args, TypeSpec *ret_type){
      TypeSpec *new_type = typespec_alloc(TYPESPEC_FUNC);
      new_type->func.args = args;
      new_type->func.num_args = num_args;
@@ -266,17 +266,17 @@ Expr **expr_list(size_t count, ... ){
 
 }
 
-TypeSpec **type_list(size_t count, ... ){
+TypeSpec **typespec_list(size_t count, ... ){
      va_list types;
      va_start(types,count);
      TypeSpec *tmp = NULL;
-     TypeSpec **new_type_list = NULL;
+     TypeSpec **new_typespec_list = NULL;
      for ( int i = 0; i < count ; i++ ){
           tmp = va_arg(types,TypeSpec *); 
-          buff_push(new_type_list,tmp);
+          buff_push(new_typespec_list,tmp);
      }
      va_end(types);
-     return new_type_list;
+     return new_typespec_list;
 
 }
 
@@ -465,14 +465,14 @@ void ast_decl_test(){
      };
      
      aggregate_item agg_list_tmp[] = {
-          new_aggregate( name_list(2,"length","age"),2, type_name("uint") ),
-          new_aggregate( name_list(1,"height"),1,type_name("float")),
-          new_aggregate(name_list(1,"integer_pointer"),1,type_pointer(type_name("int")))
+          new_aggregate( name_list(2,"length","age"),2, typespec_name("uint") ),
+          new_aggregate( name_list(1,"height"),1,typespec_name("float")),
+          new_aggregate(name_list(1,"integer_pointer"),1,typespec_pointer(typespec_name("int")))
      };
 
      func_param func_param_list[] = {
-         new_func_param("a",type_name("int")),
-         new_func_param("x",type_pointer(type_name("int"))) 
+         new_func_param("a",typespec_name("int")),
+         new_func_param("x",typespec_pointer(typespec_name("int"))) 
      };
 
      
@@ -482,12 +482,12 @@ void ast_decl_test(){
           decl_enum("Alphabet",3,enum_item_list),
           decl_aggregate(DECL_STRUCT,"Person",sizeof(agg_list_tmp)/sizeof(aggregate_item ),agg_list_tmp),
           decl_aggregate(DECL_UNION,"Person",sizeof(agg_list_tmp)/sizeof(aggregate_item),agg_list_tmp),
-          decl_var("x",type_name("int"),expr_int(3)),
+          decl_var("x",typespec_name("int"),expr_int(3)),
           decl_var("x",NULL,expr_int(2)),
-          decl_var("x",type_pointer(type_name("int")),NULL), 
+          decl_var("x",typespec_pointer(typespec_name("int")),NULL), 
           decl_const("x",expr_binary('+',expr_int(2),expr_int(3))),
-          decl_typedef("board",type_name("cells")),
-          decl_func("foo", type_name("int"), func_param_list ,sizeof(func_param_list)/sizeof(func_param),block_test1 )
+          decl_typedef("board",typespec_name("cells")),
+          decl_func("foo", typespec_name("int"), func_param_list ,sizeof(func_param_list)/sizeof(func_param),block_test1 )
      };
 
      for ( Decl **it = decl_list; it != decl_list + sizeof(decl_list)/sizeof(Decl *) ; it++ ){
@@ -532,21 +532,21 @@ void ast_stmt_test(){
 
 void ast_expr_test(){
      Expr **exps = expr_list(3,expr_name("abc"),expr_int(2),expr_int(3)) ;
-     TypeSpec **types = type_list(2,type_name("char"),type_name("int"),type_pointer(type_name("int")));
+     TypeSpec **types = typespec_list(2,typespec_name("char"),typespec_name("int"),typespec_pointer(typespec_name("int")));
      Expr *expr_list[] = {
           expr_int(1234),
           expr_float(1.234),
           expr_str("FUCK This shit"),
           expr_name("Vector"),
-          expr_cast( type_name("int"), expr_int(1234) ),
+          expr_cast( typespec_name("int"), expr_int(1234) ),
           expr_binary('+', expr_int(23), expr_name("a") ),
           expr_unary('&',expr_name("variable_name")),
           expr_ternary(expr_binary('=',expr_name("a"),expr_int(2)),expr_name("true"),expr_name("false")),
           expr_call(expr_name("hello"),exps,buff_len(exps)),
-          expr_cast(type_func(types,buff_len(types),type_name("int32")),expr_binary('+',expr_name("a"),expr_name("b"))),
+          expr_cast(typespec_func(types,buff_len(types),typespec_name("int32")),expr_binary('+',expr_name("a"),expr_name("b"))),
           expr_binary('+',expr_field(expr_name("person"),"Age"),expr_int(32)),
           expr_index(expr_name("expr_list"),expr_int(34)),
-          expr_compound( type_name("Vector"),exps , 3)
+          expr_compound( typespec_name("Vector"),exps , 3)
      };
      Expr *new_expr = expr_int( 123 );
      assert( new_expr->kind == EXPR_INT && new_expr->int_val == 123 );
