@@ -266,7 +266,9 @@ Entity *resolve_name(const char *name){
 }
 
 Entity **ordered_entities = NULL;
-ResolvedExpr resolve_expr(Expr *,Type *type);
+ResolvedExpr resolved_null = {};
+ResolvedExpr resolve_expr(Expr *);
+ResolvedExpr resolve_expr_expected(Expr *,Type *);
 void complete_type_struct(Type *type,TypeField *fields, size_t num_fields){
      assert(type->kind == TYPE_COMPLETING);
      type->kind = TYPE_STRUCT;
@@ -323,7 +325,7 @@ void complete_type(Type *type){
 }
 
 int64_t resolve_int_const_expr(Expr *expr){
-     ResolvedExpr new = resolve_expr(expr,NULL);
+     ResolvedExpr new = resolve_expr(expr);
      if ( !new.is_const ){
           fatal("Expected constant expression");
      }
@@ -386,12 +388,13 @@ Type *resolve_func_decl(Decl *decl){
      return tmp;
 }
 
-Type *resolve_const_decl(Decl *decl){
+Type *resolve_const_decl(Decl *decl, int64_t *val){
      assert(decl->kind == DECL_CONST);
-     ResolvedExpr x = resolve_expr(decl->const_decl.expr,NULL);
+     ResolvedExpr x = resolve_expr(decl->const_decl.expr);
      if ( x.is_const && !x.is_lvalue && x.type == type_int){
-          Entity *new = entity_get(decl->name);
-          new->val = x.int_val;
+          *val = x.int_val;
+     } else {
+          fatal("Initializer for a const decl is not a constant expression!\n");
      }
      return x.type;
 }
@@ -405,7 +408,7 @@ Type *resolve_var_decl(Decl *decl){
      }
 
      if ( decl->var_decl.expr ){
-          ResolvedExpr result = resolve_expr(decl->var_decl.expr,type);
+          ResolvedExpr result = resolve_expr_expected(decl->var_decl.expr,type);
           if ( type && result.type != type ){
                fatal("Expression type dosen't match the variable type!\n");
           }
@@ -440,7 +443,7 @@ void *resolve_entity(Entity *entity){
      
      switch ( entity->kind ){
          case ENTITY_CONST:
-              entity->type = resolve_const_decl(entity->decl);
+              entity->type = resolve_const_decl(entity->decl,&entity->val);
               break;
          case ENTITY_VAR:
               entity->type = resolve_var_decl(entity->decl);
@@ -512,7 +515,7 @@ ResolvedExpr resolve_expr_name(const char *name){
 
 ResolvedExpr resolve_expr_field(Expr *expr){
 
-     ResolvedExpr left = resolve_expr(expr->field_expr.operand,NULL);
+     ResolvedExpr left = resolve_expr(expr->field_expr.operand);
      Type *type  = left.type;
      complete_type(type);
      if ( type->kind != TYPE_STRUCT &&  type->kind != TYPE_UNION ){
@@ -528,39 +531,39 @@ ResolvedExpr resolve_expr_field(Expr *expr){
      return resolve_null;
 }
 
-ResolvedExpr resolve_expr_unary(Expr *expr){
-     ResolvedExpr new= resolve_expr(expr->unary_expr.operand,NULL);
-     Type *type = new.type;
-     switch ( expr->op ){
-          case TOKEN_MUL:
-               if ( type->kind != TYPE_PTR  ){
-                    fatal("Attempt to dereference a non pointer data type\n");
-                    return resolve_null;
-               }
-               return resolve_lvalue(type->ptr.base_type);
+int64_t eval_expr_unary(int64_t val, TokenKind op){
+     switch ( op ){
+     	case TOKEN_NOT:
+               return !val;
                break;
-          case TOKEN_BAND:
-               if ( !new.is_lvalue ){
-                    fatal("Attempt to reference a non variable data type\n");
-                    return resolve_null;
-               }
-               return resolve_rvalue(type_ptr(type));
+     	case TOKEN_COMPLEMENT:
+               return ~val;
                break;
           default:
+               fatal("Unidentified unary op!\n");
                assert(0);
                break;
      }
+     return 0;
+}
+ResolvedExpr resolve_expr_unary(Expr *expr){
+     ResolvedExpr new= resolve_expr(expr->unary_expr.operand);
+     Type *type = new.type;
+     if ( new.is_const ){
+          return resolve_const_int(eval_expr_unary(new.int_val,expr->unary_expr.op));
+     }
+     return resolve_rvalue(type);
 }
 
 ResolvedExpr resolve_expr_binary(Expr *expr){
-     ResolvedExpr left = resolve_expr(expr->binary_expr.left,NULL);
-     ResolvedExpr right = resolve_expr(expr->binary_expr.right,NULL);
+     ResolvedExpr left = resolve_expr(expr->binary_expr.left);
+     ResolvedExpr right = resolve_expr(expr->binary_expr.right);
 
      if ( left.type != right.type ){
           fatal("Type of values do not match\n"); // TODO
      }
      if ( left.is_const && right.is_const ){
-          switch ( expr->op ){
+          switch ( expr->binary_expr.op ){
                case TOKEN_ADD:
                     return resolve_const_int(left.int_val+right.int_val);
                     break;
@@ -604,7 +607,7 @@ ResolvedExpr resolve_expr_compound(Expr *expr, Type *expected_type){
           }
           ResolvedExpr new = {};
           for ( size_t i = 0; i < expr->compound_expr.num_args; i++ ){
-               new = resolve_expr(expr->compound_expr.args[i],type);
+               new = resolve_expr_expected(expr->compound_expr.args[i],type);
                if ( new.type != type->aggregate.fields[i].type ){
                    fatal("Type mismatch for compound literal!\n"); 
                }
@@ -616,7 +619,7 @@ ResolvedExpr resolve_expr_compound(Expr *expr, Type *expected_type){
           }
           ResolvedExpr new = {};
           for ( size_t i = 0; i < expr->compound_expr.num_args; i++ ){
-               new = resolve_expr(expr->compound_expr.args[i],type);
+               new = resolve_expr_expected(expr->compound_expr.args[i],type);
                if ( new.type != type->array.base_type ){
                     fatal("Type mismatch with array type\n");
                }
@@ -628,7 +631,7 @@ ResolvedExpr resolve_expr_compound(Expr *expr, Type *expected_type){
 
 ResolvedExpr resolve_expr_call(Expr *expr,Type *expected_type){
      assert(expr->kind == EXPR_CALL);
-     ResolvedExpr new = resolve_expr(expr->func_call_expr.operand,NULL);
+     ResolvedExpr new = resolve_expr(expr->func_call_expr.operand);
      Type *type = new.type;
      if ( type->kind != TYPE_FUNC ){
           fatal("Undeclared function being called!\n");
@@ -640,7 +643,7 @@ ResolvedExpr resolve_expr_call(Expr *expr,Type *expected_type){
           assert(0);
      } 
      for ( size_t i = 0; i < type->func.num_params; i++ ){
-          result = resolve_expr(expr->func_call_expr.args[i],NULL);
+          result = resolve_expr_expected(expr->func_call_expr.args[i],type->func.param_list[i]);
           if ( result.type != type->func.param_list[i] ){
                fatal("Function Argument type mismtach \n");
           }
@@ -648,7 +651,50 @@ ResolvedExpr resolve_expr_call(Expr *expr,Type *expected_type){
      return resolve_rvalue(type->func.ret_type); 
 }
 
-ResolvedExpr resolve_expr(Expr *expr,Type *expected_type){
+ResolvedExpr resolve_expr(Expr *expr){
+     return resolve_expr_expected(expr,NULL);
+}
+
+ResolvedExpr resolve_expr_ternary(Expr *expr){
+     assert(expr->kind == EXPR_TERNARY);
+     ResolvedExpr cond_expr = resolve_expr(expr->ternary_expr.cond_expr);
+     ResolvedExpr then_expr = resolve_expr(expr->ternary_expr.then_expr);
+     ResolvedExpr else_expr = resolve_expr(expr->ternary_expr.else_expr);
+     if ( cond_expr.type->kind != TYPE_INT && cond_expr.type->kind != TYPE_PTR ){
+          fatal("The value of condition expr is not an integer!\n");
+          assert(0);
+     }
+     if ( then_expr.type != else_expr.type ){
+          fatal("Type mismatch for condition expressions of ternary expression!\n");
+          assert(0);
+     }
+     if ( cond_expr.is_const && then_expr.is_const && else_expr.is_const ){
+         return cond_expr.int_val?then_expr:else_expr; 
+     }
+     return resolve_rvalue(then_expr.type);
+}
+
+ResolvedExpr resolve_expr_cast(Expr *expr){
+     // TODO: add more cast types
+     assert(expr->kind == EXPR_CAST);
+     ResolvedExpr new = resolve_expr(expr->cast_expr.expr);
+     Type *cast_type = resolve_typespec(expr->cast_expr.cast_type);
+     complete_type(cast_type);
+     if ( cast_type->kind == TYPE_PTR ){
+          if ( !new.is_lvalue || (new.type->kind != TYPE_PTR && new.type->kind != TYPE_INT) ){
+               fatal("Invalid expression to cast to pointer type.\n");
+          }
+     } else if ( cast_type->kind == TYPE_INT ){
+          if ( new.type->kind != TYPE_PTR && new.type->kind != TYPE_INT ){
+               fatal("Invalid expression to cast to integer type.\n");
+          }
+     } else {
+          fatal("Invalid cast type!\n");
+     }
+     return resolve_rvalue(cast_type);
+}
+
+ResolvedExpr resolve_expr_expected(Expr *expr,Type *expected_type){
      switch (expr->kind){
           case EXPR_INT:
                return resolve_const_int(expr->int_val);
@@ -663,9 +709,10 @@ ResolvedExpr resolve_expr(Expr *expr,Type *expected_type){
                return resolve_expr_call(expr,NULL);
                break;
           case EXPR_CAST:
+               return resolve_expr_cast(expr);
                break;
           case EXPR_SIZEOF_EXPR:{
-               ResolvedExpr new = resolve_expr(expr->sizeof_expr,expected_type);
+               ResolvedExpr new = resolve_expr_expected(expr->sizeof_expr,expected_type);
                Type *t= new.type;
                assert(t!=NULL);
                complete_type(t);
@@ -685,6 +732,7 @@ ResolvedExpr resolve_expr(Expr *expr,Type *expected_type){
                return resolve_expr_binary(expr);
                break;
           case EXPR_TERNARY:
+               return resolve_expr_ternary(expr);
                break;
           case EXPR_INDEX:
                break;
@@ -748,13 +796,16 @@ void entity_add_type(Type *type){
 
 
 void resolve_test(void){
-     char *list[] = {
-//          "typedef V = addV(int,int);",     
-          "func addV(x:Vector,y:Vector):Vector { return Vector{p.x+q.x,p.y+q.y}; }",
- //         "func add(x:int,y:int):int{ return x+y;}",
+     char *list[] = { 
+          "const x = ~1;",
+//          "var x = cast(int)1;",
+//          "var n:int = 1;",
+ //         "const x = 1 ? n : 3;",
+//          "func addV(x:Vector,y:Vector):Vector { return {p.x+q.x,p.y+q.y}; }",
+//         "func add(x:int,y:int):int{ return x+y;}",
 //          "var z:int = add(1,2);",
-//          "var z:int[3] = {1,2,3};",
-          "struct Vector { x,y:int; };",
+//          "var c:int[3] = {1,2,3};",
+//          "struct Vector { x,y:int; };",
 //          "var e:int* = &p",
 //          "var p:int = 42",
 //          "var q:Vector = {12,999}",
