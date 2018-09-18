@@ -127,6 +127,8 @@ void buff_test(void){
      buff_printf(str,"%s\n","fucc this shit");
      printf("%s",str);
      assert(  str[strlen(str)] == 0 );
+     buff_free(str);
+     buff_free(xz);
      return;
 }
 
@@ -173,6 +175,12 @@ void *arena_alloc(Arena *arena,size_t size ){
      assert( arena->ptr <= arena->end );
      assert( ptr == ALIGN_DOWN_PTR(ptr,ARENA_ALIGNMENT) );
      return ptr;          
+}
+
+void *arena_dup(Arena *arena,void *src, size_t size ){
+     void *dest = arena_alloc(arena,size);
+     memcpy(dest,src,size);
+     return dest;
 }
 
 void arena_free(Arena *arena ){
