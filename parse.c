@@ -76,6 +76,12 @@ Expr *parse_expr_operand(){
                expect_token(TOKEN_RPAREN);
                return expr_sizeof_expr(expr);
           }
+     } else if ( match_keyword(cast_keyword) ){
+          expect_token(TOKEN_LPAREN);
+          TypeSpec *type = parse_type();
+          expect_token(TOKEN_RPAREN);
+          Expr *expr = parse_expr();
+          return expr_cast(type,expr);
      }
      syntax_error("Expected Expression but didn't get any thing");
      return NULL;
