@@ -352,16 +352,18 @@ void print_type(TypeSpec *type){
                break;
           case TYPESPEC_ARRAY:
                printf("(array ");
-               print_type( type->base_type );
-               print_expr(type->size);
+               print_type( type->array.base_type );
+               printf("[");
+               print_expr(type->array.size);
+               printf("])");
                break;
           case TYPESPEC_POINTER:
                printf("(ptr ");
-               print_type(type->base_type);
+               print_type(type->ptr.base_type);
                printf(")");
                break;
           case TYPESPEC_FUNC:{
-               func_typespec fn = type->func_decl;
+               func_typespec fn = type->func;
                printf("(func (");
                for ( TypeSpec **it = fn.args; it != fn.args + fn.num_args ; it++){
                     printf(" ");

@@ -16,15 +16,19 @@
 #include "print.c"
 #include "ast.c"
 #include "parse.c"
-
+#include "resolve.c"
 
 void run_tests(void){
      buff_test();
      str_intern_test();
      lex_test();
-//     arena_test();
- //    ast_test();
+     arena_test();
+     ast_test();
      parse_test();
+     type_test(); 
+     resolve_test();
+//     order_test();
+     flush_print_buff(stdout);
 }
 
 int main(int argc, char **argv){
