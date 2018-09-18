@@ -11,17 +11,14 @@ typedef struct StmtBlock {
 } StmtBlock;
 enum TypeSpecKind {
      TYPESPEC_NAME,
-     TYPESPEC_PAREN,
      TYPESPEC_FUNC,
      TYPESPEC_ARRAY,
      TYPESPEC_POINTER
 };
 
 typedef struct func_typespec{
-     struct{
-          BUF( TypeSpec **args;) // Buffer to hold the data type of arguments given to a function ) )
-          size_t num_args;
-     };
+     BUF( TypeSpec **args;) // Buffer to hold the data type of arguments given to a function ) )
+     size_t num_args;
      TypeSpec *ret_type; // The return type of the function
 } func_typespec;
 
@@ -30,11 +27,14 @@ struct TypeSpec{
      struct {
           const char *name; // Type name
           // array  and pointer
+          struct{
+               TypeSpec *base_type;
+          } ptr;
           struct {
                TypeSpec *base_type; // Base type of an array
                Expr *size; // Index of the array
-          };
-          func_typespec func_decl;
+          }array;
+          func_typespec func;
      };
 };
 
@@ -88,7 +88,6 @@ typedef enum StmtKind {
 typedef struct enum_item{
      const char *name;
      Expr *expr;
-     TypeSpec *type;
 } enum_item;
 
 typedef struct aggregate_item{
