@@ -100,6 +100,7 @@ const char *do_keyword;
 const char *continue_keyword;
 const char *break_keyword;
 const char *return_keyword;
+const char *cast_keyword;
 const char *sizeof_keyword;
 const char *first_keyword;
 const char *last_keyword;
@@ -138,6 +139,7 @@ void init_intern_keyword(void){
      return_keyword  = str_intern("return"); buff_push(keywords,return_keyword); 
      break_keyword  = str_intern("break"); buff_push(keywords,break_keyword); 
      continue_keyword  = str_intern("continue"); buff_push(keywords,continue_keyword); 
+     cast_keyword  = str_intern("cast"); buff_push(keywords,cast_keyword); 
      sizeof_keyword  = str_intern("sizeof"); buff_push(keywords,sizeof_keyword); 
      first_keyword = typedef_keyword;
      last_keyword = sizeof_keyword;
@@ -571,7 +573,7 @@ bool is_assign_op(){
 }
 
 bool is_unary_op(){
-     return token.kind == TOKEN_MUL || token.kind == TOKEN_COMPLEMENT || token.kind == TOKEN_BAND || token.kind == TOKEN_SUB|| token.kind == TOKEN_ADD;
+     return token.kind == TOKEN_MUL || token.kind == TOKEN_COMPLEMENT || token.kind == TOKEN_BAND || token.kind == TOKEN_SUB|| token.kind == TOKEN_ADD || token.kind == TOKEN_NOT;
 }
 
 bool is_mul_op(){
