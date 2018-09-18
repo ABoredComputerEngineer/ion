@@ -149,6 +149,7 @@ struct Decl{
 // 
 //
 typedef struct unary_def {
+     TokenKind op;
      Expr *operand;
 } unary_def;
 
@@ -169,6 +170,7 @@ typedef struct func_call_def{
 } func_call_def;
 
 typedef struct binary_def{
+     TokenKind op;
      Expr *left;
      Expr *right;
 } binary_def;
@@ -193,7 +195,6 @@ typedef struct cast_def{
 
 struct Expr {
      ExprKind kind;
-     TokenKind op;
      union {
           uint64_t int_val;
           double float_val;

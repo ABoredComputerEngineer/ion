@@ -102,7 +102,7 @@ Expr *expr_name( const char *name){
 
 Expr *expr_unary( TokenKind op, Expr *expr){
     Expr *new_expr = expr_new( EXPR_UNARY );
-    new_expr->op = op;
+    new_expr->unary_expr.op = op;
     new_expr->unary_expr.operand = expr;
     return new_expr;; 
 }
@@ -110,7 +110,7 @@ Expr *expr_unary( TokenKind op, Expr *expr){
 Expr *expr_binary( TokenKind op, Expr *left, Expr *right){
 
     Expr *new_expr = expr_new( EXPR_BINARY );
-    new_expr->op = op;
+    new_expr->binary_expr.op = op;
     new_expr->binary_expr.left=left;
     new_expr->binary_expr.right=right;
     return new_expr; 
