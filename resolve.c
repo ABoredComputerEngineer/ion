@@ -550,7 +550,24 @@ ResolvedExpr resolve_expr_unary(Expr *expr){
      ResolvedExpr new= resolve_expr(expr->unary_expr.operand);
      Type *type = new.type;
      if ( new.is_const ){
-          return resolve_const_int(eval_expr_unary(new.int_val,expr->unary_expr.op));
+          switch ( expr->unary_expr.op ){
+               case TOKEN_MUL:{
+                    if ( type->kind != TYPE_PTR ){
+                         fatal("Trying to de-reference a non pointer data type!\n");
+                    }
+                    return resolve_lvalue(type);
+                    break;
+               }
+               case TOKEN_BAND:
+                    if ( !new.is_lvalue ){
+                         fatal("Trying to reference a non lvalue expression!\n");
+                    }
+                    return resolve_rvalue(type);
+                    break;
+               default:
+                    return resolve_const_int(eval_expr_unary(new.int_val,expr->unary_expr.op));
+                    break;
+          }
      }
      return resolve_rvalue(type);
 }
@@ -798,6 +815,9 @@ void entity_add_type(Type *type){
 void resolve_test(void){
      char *list[] = { 
           "const x = ~1;",
+          "const s = !1;",
+          "var p:int;",
+          "var b = *p;",
 //          "var x = cast(int)1;",
 //          "var n:int = 1;",
  //         "const x = 1 ? n : 3;",
