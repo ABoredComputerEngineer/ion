@@ -2,14 +2,30 @@
 // The parse function consumes the tokens they are supposed to parse
 // For e.g parse_name on a:int will now consume a and current token will be :int after the function call
 //
-StmtBlock parse_stmt_block();
-StmtBlock parse_stmt_list();
-TypeSpec *parse_type();
-Stmt *parse_stmt();
-Stmt *parse_stmt_if();
-Expr *parse_expr();
-Expr *parse_expr_test(){
+StmtBlock parse_stmt_block(void);
+StmtBlock parse_stmt_list(void);
+TypeSpec *parse_type(void);
+Stmt *parse_stmt(void);
+Stmt *parse_stmt_if(void);
+Expr *parse_expr(void);
+Expr *parse_expr_test(void){
      return parse_expr();
+}
+
+
+Expr *parse_expr_compound(TypeSpec *type){
+     Expr **expr_list = NULL;
+     buff_push(expr_list,parse_expr());
+     while ( !is_token(TOKEN_RBRACE) && !is_token(TOKEN_EOF) ){
+          match_token(TOKEN_COMMA);
+          buff_push(expr_list,parse_expr());
+     }
+     expect_token(TOKEN_RBRACE);
+     Expr **ast_expr_list = ast_dup(expr_list,buff_sizeof(expr_list));
+     size_t len = buff_len(expr_list);
+     //buff_free(expr_list); 
+     return expr_compound( type,ast_expr_list,len);
+     
 }
 
 
@@ -31,55 +47,38 @@ Expr *parse_expr_operand(){
                const char *name = token.name;
                next_token();
                if ( match_token(TOKEN_LBRACE) ){
-                    Expr **expr_list = NULL;
-                    buff_push(expr_list,parse_expr());
-                    while ( !is_token(TOKEN_RBRACE) && !is_token(TOKEN_EOF) ){
-                         match_token(TOKEN_COMMA);
-                         buff_push(expr_list,parse_expr());
-                    }
-                    expect_token(TOKEN_RBRACE);
-                    Expr **ast_expr_list = ast_dup(expr_list,buff_sizeof(expr_list));
-                    size_t len = buff_len(expr_list);
-                    //buff_free(expr_list); 
-                    return expr_compound( type_name(name),ast_expr_list,len);
-               } else {
+                    return parse_expr_compound( typespec_name(name));
+               } 
+               else {
                     return expr_name(name);
                }
       } else if ( match_token(TOKEN_LPAREN) ){ 
-               Expr *new_expr = NULL;
-               if ( match_token(TOKEN_COLON) ){
-                    TypeSpec *type = parse_type();
-                    expect_token(TOKEN_RPAREN);
-                    new_expr = parse_expr();
-                    return expr_cast(type,new_expr);
-               }
-               new_expr = parse_expr();
+          Expr *new_expr = NULL;
+          if ( match_token(TOKEN_COLON) ){
+               TypeSpec *type = parse_type();
                expect_token(TOKEN_RPAREN);
-               return new_expr;
-          } else if ( match_token(TOKEN_LBRACE) ){
-                     Expr **list = NULL;
-                     buff_push(list,parse_expr());
-                     while ( !is_token(TOKEN_EOF)  && !is_token(TOKEN_RBRACE) ){
-                          match_token(TOKEN_COMMA);
-                          buff_push(list,parse_expr());
-                          
-                     }
-                     expect_token(TOKEN_RBRACE);
-                   return expr_compound(NULL,list,buff_len(list));
-          } else if ( match_keyword(sizeof_keyword) ){
-               expect_token(TOKEN_LPAREN);
-               if ( match_token(TOKEN_COLON)){
-                   TypeSpec *type = parse_type();
-                  expect_token(TOKEN_RPAREN);
-                 return expr_sizeof_type(type); 
-               } else {
-                    Expr *expr = parse_expr();
-                    expect_token(TOKEN_RPAREN);
-                    return expr_sizeof_expr(expr);
-               }
+               expect_token(TOKEN_LBRACE);
+               return parse_expr_compound(type);
           }
-      syntax_error("Expected Expression but didn't get any thing");
-      return NULL;
+          new_expr = parse_expr();
+          expect_token(TOKEN_RPAREN);
+          return new_expr;
+     } else if ( match_token(TOKEN_LBRACE) ){
+          return parse_expr_compound(NULL);
+     } else if ( match_keyword(sizeof_keyword) ){
+          expect_token(TOKEN_LPAREN);
+          if ( match_token(TOKEN_COLON)){
+              TypeSpec *type = parse_type();
+             expect_token(TOKEN_RPAREN);
+            return expr_sizeof_type(type); 
+          } else {
+               Expr *expr = parse_expr();
+               expect_token(TOKEN_RPAREN);
+               return expr_sizeof_expr(expr);
+          }
+     }
+     syntax_error("Expected Expression but didn't get any thing");
+     return NULL;
 }
 
 Expr **parse_expr_list(){
@@ -112,8 +111,8 @@ Expr *parse_expr_base(){
           operand = expr_index(operand,parse_expr());
           expect_token(TOKEN_RBRACKET);
      } else if ( match_token(TOKEN_DOT) ){
-          if ( is_token(TOKEN_STR) ){
-               operand = expr_field(operand,token.str_val);
+          if ( is_token(TOKEN_NAME) ){
+               operand = expr_field(operand,token.name);
           } else {
                syntax_error("Field access requires name to be final token\n");
           }
@@ -208,27 +207,26 @@ const char *parse_name(){
           syntax_error("Expected TOKEN_NAME, got crap instead");
      return NULL;
 }
-TypeSpec *parse_type();
 TypeSpec *parse_base_type(){
      if ( is_token(TOKEN_NAME) ){
           const char *name = token.name;
           next_token();
-         return type_name(name) ;
+         return typespec_name(name) ;
      } else if ( match_keyword(func_keyword) ){
-          TypeSpec **type_list = NULL;
+          TypeSpec **typespec_list = NULL;
           expect_token(TOKEN_LPAREN);
-          buff_push(type_list,parse_type());
+          buff_push(typespec_list,parse_type());
           while ( !is_token(TOKEN_RPAREN) && !is_token(TOKEN_EOF) ){
                expect_token(TOKEN_COMMA);
-               buff_push(type_list,parse_type());
+               buff_push(typespec_list,parse_type());
           }
           expect_token(TOKEN_RPAREN);
           expect_token(TOKEN_COLON);
-          TypeSpec **ast_list = ast_dup(type_list,buff_sizeof(type_list));
-          size_t len = buff_len(type_list);
-          //buff_free(type_list);
+          TypeSpec **ast_list = ast_dup(typespec_list,buff_sizeof(typespec_list));
+          size_t len = buff_len(typespec_list);
+          //buff_free(typespec_list);
           TypeSpec *ret_type = parse_type();
-          return type_func(ast_list,len,ret_type);
+          return typespec_func(ast_list,len,ret_type);
      } else {
           expect_token(TOKEN_LPAREN);
           TypeSpec *type = parse_base_type();
@@ -240,10 +238,10 @@ TypeSpec *parse_base_type(){
 TypeSpec *parse_type(){
      TypeSpec *type = parse_base_type();
      if ( match_token(TOKEN_MUL) ){
-          type = type_pointer(type);
+          type = typespec_pointer(type);
      } else if ( match_token(TOKEN_LBRACKET) ){
           Expr *expr = parse_expr();
-          type = type_array(type,expr);
+          type = typespec_array(type,expr);
           expect_token(TOKEN_RBRACKET);
      }
      return type;
@@ -603,49 +601,49 @@ void parse_test(){
      assert( !is_token_keyword("fucnthisshit"));
      use_buff_print = true;
      char *parse_string[] = {
-          "var x:(func (char,char):int) = 12",
-          "enum abc { FUCK, THIS = 23, SHIT, YOU = 12, FUCKING= 14, ASS = 9}",
-          "struct abc { x,y:int; z:char;} ",
-          "union abc { x,y:int; z:char;} ",
-          "var x:int = 1234",
-          "var x:Vector",
-      "var x:char = abc",
-      "const x = 1234",
-     "typedef cell = int32",
-        "func abc ( a:int,b:char) : int {}",
-        "func xyz ( a:int,b:char) {}",
-        "func xyz ( ) {}",
-        "func xyz ( ):char {if(x!=2){break;continue;}else if (x!=2){break;}else{continue;}}",
-        "func xyz ( ):char {if(x!=2){break;continue;}else{break;}}",
-        "func xyz ( ):char {if(x!=2){break;continue;}else if(x!=2){break;}}",
-        "func foo(a:int,b:int):char{while(a>=2){if(x!=2){continue;}}}",
-        "func do_while(a:char,b:char):int{do { continue; }while(x!=2);}",
-        "func foo (a:char*,b:size_t):char*{break;continue;}",
-          "func foo (a:char,b:char):int{for(i:=0;x;i++){continue;}}", 
-          "func foo (a:char,b:char):int{for(i:=0;x;i++){switch ( o ){ case a,b,c:x+=1 ;break; case b:case c: break; default:break;}}}" ,
-         "func foo (a:int):int{ x:=x+2; }",
-         "func foo (a:int):int{ x = y==2 ? a : b(~x,*y); }",
-         " func foo (a:int *):int{ x <<= *x+2*3 ;}",
-         " func fact(n:int):int { trace(\"fact\"); if ( n== 0 ){return 1;} else { return n*fact(n-1);}}",
-         "func fact(n:int):int { p := 1; for(i:=1; i<=n; i++){p*=1;} return p;}",
-          " var foo = a?a&b + c<<d + e*f == +u-v-w + *g/h(x,y) + -i%k[x] && m<=n*(p+q/r) : 0",
-          " func f(x:int):bool{switch(x){case 0:case 1: return true; case 2: default: return false;}}",
-         "enum Color { RED = 3, GREEN, BLUE = 0}",
-         " var x = b==1?1+2:3-4",
-         "const pi = 3.14",
-         "struct Vector {x,y:float;}",
-          "var v : Vector = {1.0,-1.0}",
-          "union IntOrFloat { i:int; f:float;}",
-          "typedef Vectors = Vector[1+2]",
-          "var v:int = **x",
-          "func fact(x:int):int{while(x!=1){product*=x;x = x - 1 ;}}",
-          "const x = sizeof(:int)",
-          "var x:int = sizeof(3)",
-          "func addx(x:int):int{var y:int= 2; x+=2 ; return x ;}",
-          "func addx(x:int):int{var y:int= 2; x+=2 ; return ;}"
+//          "var x:(func (char,char):int) = 12",
+//          "enum abc { FUCK, THIS = 23, SHIT, YOU = 12, FUCKING= 14, ASS = 9}",
+//          "struct abc { x,y:int; z:char;} ",
+//          "union abc { x,y:int; z:char;} ",
+//          "var x:int = 1234",
+//          "var x:Vector",
+//      "var x:char = abc",
+//      "const x = 1234",
+//     "typedef cell = int32",
+//        "func abc ( a:int,b:char) : int {}",
+//        "func xyz ( a:int,b:char) {}",
+//        "func xyz ( ) {}",
+//        "func xyz ( ):char {if(x!=2){break;continue;}else if (x!=2){break;}else{continue;}}",
+//        "func xyz ( ):char {if(x!=2){break;continue;}else{break;}}",
+//        "func xyz ( ):char {if(x!=2){break;continue;}else if(x!=2){break;}}",
+//        "func foo(a:int,b:int):char{while(a>=2){if(x!=2){continue;}}}",
+//        "func do_while(a:char,b:char):int{do { continue; }while(x!=2);}",
+//        "func foo (a:char*,b:size_t):char*{break;continue;}",
+//          "func foo (a:char,b:char):int{for(i:=0;x;i++){continue;}}", 
+//          "func foo (a:char,b:char):int{for(i:=0;x;i++){switch ( o ){ case a,b,c:x+=1 ;break; case b:case c: break; default:break;}}}" ,
+//         "func foo (a:int):int{ x:=x+2; }",
+//         "func foo (a:int):int{ x = y==2 ? a : b(~x,*y); }",
+//         " func foo (a:int *):int{ x <<= *x+2*3 ;}",
+//         " func fact(n:int):int { trace(\"fact\"); if ( n== 0 ){return 1;} else { return n*fact(n-1);}}",
+//         "func fact(n:int):int { p := 1; for(i:=1; i<=n; i++){p*=1;} return p;}",
+//          " var foo = a?a&b + c<<d + e*f == +u-v-w + *g/h(x,y) + -i%k[x] && m<=n*(p+q/r) : 0",
+//          " func f(x:int):bool{switch(x){case 0:case 1: return true; case 2: default: return false;}}",
+//         "enum Color { RED = 3, GREEN, BLUE = 0}",
+//         " var x = b==1?1+2:3-4",
+//         "const pi = 3.14",
+//         "struct Vector {x,y:float;}",
+//          "var v : Vector = {1.0,-1.0}",
+//          "union IntOrFloat { i:int; f:float;}",
+//          "typedef Vectors = Vector[1+2]",
+//          "var v:int = **x",
+//          "func fact(x:int):int{while(x!=1){product*=x;x = x - 1 ;}}",
+//          "const x = sizeof(:int)",
+//          "var x:int = sizeof(3)",
+//          "func addx(x:int):int{var y:int= 2; x+=2 ; return x ;}",
+//          "func addx(x:int):int{var y:int= 2; x+=2 ; return ;}"
           //"var x = ",
          // "func fact(x:int):int{2;}"
-               
+          "var x:int = a.b"     
      };
      Decl *temp_decl; 
      for ( char **it =  parse_string; it!=parse_string+sizeof(parse_string)/sizeof(char *); it++ ){
@@ -654,6 +652,5 @@ void parse_test(){
           print_decl(temp_decl);
           printf("\n");
      }
-     flush_print_buff(stdout);
 
 }
