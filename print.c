@@ -84,6 +84,7 @@ char *operations[] = {
      [ TOKEN_BOR ] = "|",
      [ TOKEN_LT ] = "<",
      [ TOKEN_GT ] = ">",
+     [ TOKEN_NOT ] = "!",
      //[ '<' ] = "<",
      //[ '<' ] = "<",
 };
@@ -95,7 +96,7 @@ void print_stmt_block(StmtBlock block,int indent){
           print_stmt(*stmt);
      }
 }
-
+ 
 
 void print_stmt(Stmt *stmt){
      switch ( stmt->kind ) {
@@ -427,14 +428,14 @@ void print_expr( Expr *expr ) {
                printf(") ");
                break;
           case EXPR_BINARY:
-               printf("(%s ", operations[expr->op]);
+               printf("(%s ", operations[expr->binary_expr.op]);
                print_expr(expr->binary_expr.left);
                printf(" ");
                print_expr(expr->binary_expr.right);
                printf(")");
                break;
           case EXPR_UNARY:
-               printf("(%s ", operations[expr->op]);
+               printf("(%s ", operations[expr->binary_expr.op]);
                print_expr(expr->unary_expr.operand);
                printf(")");
                break;
