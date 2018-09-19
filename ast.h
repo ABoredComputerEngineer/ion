@@ -181,10 +181,24 @@ typedef struct ternary_def {
      Expr *else_expr;
 } ternary_def;
 
+typedef enum FieldType {
+     FIELD_NONE,
+     FIELD_INDEX,
+     FIELD_NAME,
+} FieldType;
+typedef struct CompoundField{
+     FieldType kind;
+     Expr *field_expr;
+     Expr *expr;
+} CompoundField;
 typedef struct compound_def{
+     /*
+      * Support for compound field assignment like { [23] = 23 } and { val = 2 }
+      */
      TypeSpec *type;
      size_t num_args;
-     BUF(Expr **args); // Buffer
+     CompoundField *fields;
+//     BUF(Expr **args); // Buffer
 } compound_def;
 
 typedef struct cast_def{

@@ -10,7 +10,7 @@ Expr *expr_ternary( Expr *cond, Expr *then_expr, Expr *else_expr);
 Expr *expr_cast( TypeSpec *type, Expr *expr);
 Expr *expr_call(Expr *operand, Expr **args, size_t num_args);
 Expr *expr_index(Expr *operand, Expr *index);
-Expr *expr_compound( TypeSpec *type, Expr **args, size_t num_args );
+Expr *expr_compound( TypeSpec *type, CompoundField *field_list, size_t num_args );
 
 Arena arena_ast; // Memory to store all ast related objects
 
@@ -153,10 +153,10 @@ Expr *expr_field(Expr *operand, const char *field_name){
      return new_expr;
 }
 
-Expr *expr_compound( TypeSpec *type, Expr **args, size_t num_args ){
+Expr *expr_compound( TypeSpec *type, CompoundField *field_list, size_t num_args ){
      Expr *new_expr = expr_new(EXPR_COMPOUND);
      new_expr->compound_expr.type = type;
-     new_expr->compound_expr.args = args;
+     new_expr->compound_expr.fields = field_list;
      new_expr->compound_expr.num_args = num_args;
      return new_expr;
 }
@@ -546,7 +546,7 @@ void ast_expr_test(){
           expr_cast(typespec_func(types,buff_len(types),typespec_name("int32")),expr_binary('+',expr_name("a"),expr_name("b"))),
           expr_binary('+',expr_field(expr_name("person"),"Age"),expr_int(32)),
           expr_index(expr_name("expr_list"),expr_int(34)),
-          expr_compound( typespec_name("Vector"),exps , 3)
+          //expr_compound( typespec_name("Vector"),exps , 3)
      };
      Expr *new_expr = expr_int( 123 );
      assert( new_expr->kind == EXPR_INT && new_expr->int_val == 123 );

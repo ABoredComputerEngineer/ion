@@ -76,9 +76,11 @@ arguments =  '(' expr_list ')' // function call
           | '[' expr ']' // array indexing
           | '.' NAME    // field accessign ( structs, unions )
 operand_expr = INT | FLOAT | STR 
-               | NAME ( '{' expr_list '}' )?
+               | NAME? ( '{'compound_field* '}' )?
                | '(' expr ')'
                | typespec? '{' expr_list '}' 
-               | CAST '(' type ')' expr
+               | CAST '(' type ')' unary_expr
+compound_field = (field_type '=')? expr 
+field_type = NAME  | '[' expr ']'
 typespec = NAME | '(' :type ')'
     
