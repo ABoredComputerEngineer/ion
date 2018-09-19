@@ -8,23 +8,44 @@ TypeSpec *parse_type(void);
 Stmt *parse_stmt(void);
 Stmt *parse_stmt_if(void);
 Expr *parse_expr(void);
+Expr *parse_expr_unary(void);
 Expr *parse_expr_test(void){
      return parse_expr();
 }
 
 
+CompoundField parse_compound_field(void){
+     Expr *field_expr = NULL;
+     Expr *expr = NULL;
+     if ( match_token(TOKEN_LBRACKET) ){
+          field_expr = parse_expr();
+          expect_token(TOKEN_RBRACKET);
+          expect_token(TOKEN_ASSIGN);
+          expr = parse_expr(); 
+          return (CompoundField){FIELD_INDEX,field_expr,expr};
+     } 
+     field_expr = parse_expr();
+     if ( field_expr->kind == EXPR_NAME && match_token(TOKEN_ASSIGN)){
+          expr = parse_expr();
+          return (CompoundField){FIELD_NAME,field_expr,expr};
+     } else {
+          return (CompoundField){FIELD_NONE,NULL,field_expr};
+     }
+
+}
 Expr *parse_expr_compound(TypeSpec *type){
-     Expr **expr_list = NULL;
-     buff_push(expr_list,parse_expr());
-     while ( !is_token(TOKEN_RBRACE) && !is_token(TOKEN_EOF) ){
+     CompoundField *field_list = NULL;
+     
+     buff_push(field_list,parse_compound_field());
+     while ( !is_token(TOKEN_EOF) && !is_token(TOKEN_RBRACE) ){
           match_token(TOKEN_COMMA);
-          buff_push(expr_list,parse_expr());
+          buff_push(field_list,parse_compound_field());
      }
      expect_token(TOKEN_RBRACE);
-     Expr **ast_expr_list = ast_dup(expr_list,buff_sizeof(expr_list));
-     size_t len = buff_len(expr_list);
+     size_t len = buff_len(field_list);
+     field_list = ast_dup(field_list,buff_sizeof(field_list));
      //buff_free(expr_list); 
-     return expr_compound( type,ast_expr_list,len);
+     return expr_compound( type,field_list,len);
      
 }
 
@@ -80,7 +101,7 @@ Expr *parse_expr_operand(){
           expect_token(TOKEN_LPAREN);
           TypeSpec *type = parse_type();
           expect_token(TOKEN_RPAREN);
-          Expr *expr = parse_expr();
+          Expr *expr = parse_expr_unary();
           return expr_cast(type,expr);
      }
      syntax_error("Expected Expression but didn't get any thing");
@@ -609,8 +630,8 @@ void parse_test(){
      char *parse_string[] = {
 //          "var x:(func (char,char):int) = 12",
 //          "enum abc { FUCK, THIS = 23, SHIT, YOU = 12, FUCKING= 14, ASS = 9}",
-//          "struct abc { x,y:int; z:char;} ",
-//          "union abc { x,y:int; z:char;} ",
+          "struct abc { x,y:int; z:char;} ",
+          "union abc { x,y:int; z:char;} ",
 //          "var x:int = 1234",
 //          "var x:Vector",
 //      "var x:char = abc",
@@ -637,8 +658,9 @@ void parse_test(){
 //         "enum Color { RED = 3, GREEN, BLUE = 0}",
 //         " var x = b==1?1+2:3-4",
 //         "const pi = 3.14",
-//         "struct Vector {x,y:float;}",
-//          "var v : Vector = {1.0,-1.0}",
+         "struct Vector {x,y:float;}",
+          "var v : Vector = { x = 1.0,y = -1.0}",
+          "var x : int[256] = { [1] = 23, [43] = 34 };",
 //          "union IntOrFloat { i:int; f:float;}",
 //          "typedef Vectors = Vector[1+2]",
 //          "var v:int = **x",
