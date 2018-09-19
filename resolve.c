@@ -1,5 +1,7 @@
 #define INT_SIZE 4
 #define FLOAT_SIZE 4
+#define CHAR_SIZE 1
+#define VOID_SIZE 0
 #define PTR_SIZE 8
 
 Arena resolve_arena;
@@ -12,6 +14,7 @@ typedef enum TypeKind {
      TYPE_ENUM,
      TYPE_INT,
      TYPE_FLOAT,
+     TYPE_CHAR,
      TYPE_PTR,
      TYPE_ARRAY,
      TYPE_FUNC,
@@ -183,8 +186,13 @@ Type *type_incomplete(Entity *entity){
 
 Type INT_TYPE = { TYPE_INT, INT_SIZE};
 Type FLOAT_TYPE = {TYPE_FLOAT, FLOAT_SIZE};
+Type CHAR_TYPE = { TYPE_CHAR, CHAR_SIZE};
+Type VOID_TYPE = { TYPE_CHAR, VOID_SIZE};
+
 Type *type_int = &INT_TYPE;
 Type *type_float = &FLOAT_TYPE;
+Type *type_char = &CHAR_TYPE;
+Type *type_void = &VOID_TYPE;
 
 Entity **entity_list = NULL;
 Entity *entity_get(const char *);
@@ -203,7 +211,7 @@ Entity *entity_add_decl(Decl *decl){
      if ( entity_get(decl->name) ){
           fatal("Duplicate var names, %s\n",decl->name);
           assert(0);
-     }
+     } 
      EntityKind kind = ENTITY_NONE;
      switch ( decl->kind ){
           case DECL_ENUM:
@@ -500,6 +508,10 @@ ResolvedExpr resolve_const_float(double float_val){
 ResolvedExpr resolve_expr_name(const char *name){
      
      Entity *new = entity_get(name);
+     if ( !new ){
+          fatal("identifier %s is not defined\n",name);
+          assert(0);
+     }
      resolve_entity(new);
      if ( new->kind == ENTITY_VAR ){
           return resolve_lvalue(new->type);
@@ -539,6 +551,12 @@ int64_t eval_expr_unary(int64_t val, TokenKind op){
      	case TOKEN_COMPLEMENT:
                return ~val;
                break;
+          case TOKEN_ADD:
+               return +val;
+               break;
+          case TOKEN_SUB:
+               return -val;
+               break;
           default:
                fatal("Unidentified unary op!\n");
                assert(0);
@@ -546,48 +564,127 @@ int64_t eval_expr_unary(int64_t val, TokenKind op){
      }
      return 0;
 }
+
+
+Type *ptr_decay(Type *type){
+     /*
+      * Chages array data type to its corresponding pointer type
+      * other data types remain unchanged
+      */
+     if ( type->kind == TYPE_ARRAY ){
+          return type_ptr(type->array.base_type);
+     } else {
+          return type;
+     }
+}
+
 ResolvedExpr resolve_expr_unary(Expr *expr){
      ResolvedExpr new= resolve_expr(expr->unary_expr.operand);
      Type *type = new.type;
-     if ( new.is_const ){
-          switch ( expr->unary_expr.op ){
-               case TOKEN_MUL:{
-                    if ( type->kind != TYPE_PTR ){
-                         fatal("Trying to de-reference a non pointer data type!\n");
-                    }
-                    return resolve_lvalue(type);
-                    break;
+     switch ( expr->unary_expr.op ){
+          case TOKEN_MUL:{
+               type = ptr_decay(type);
+               if ( type->kind != TYPE_PTR ){
+                    fatal("Trying to de-reference a non pointer data type!\n");
                }
-               case TOKEN_BAND:
-                    if ( !new.is_lvalue ){
-                         fatal("Trying to reference a non lvalue expression!\n");
-                    }
-                    return resolve_rvalue(type);
-                    break;
-               default:
-                    return resolve_const_int(eval_expr_unary(new.int_val,expr->unary_expr.op));
-                    break;
+               return resolve_lvalue(type->ptr.base_type);
+               break;
           }
+          case TOKEN_BAND:
+               if ( !new.is_lvalue ){
+                    fatal("Trying to reference a non lvalue expression!\n");
+               }
+               return resolve_rvalue(type);
+               break;
+          default:{
+               if ( new.is_const ){
+                    return resolve_const_int(eval_expr_unary(new.int_val,expr->unary_expr.op));
+               } else {
+                    return resolve_rvalue(type);
+               }
+               break;
+          }
+     } 
+}
+
+int64_t eval_expr_binary(int64_t left, int64_t right,TokenKind op){
+     switch ( op ){
+     	case TOKEN_MUL:
+               return left*right;
+			break;
+     	case TOKEN_MOD:
+               if ( right == 0 ){
+                    fatal("Attempting division by 0\n");
+                    assert(0);
+               }
+               return left % right;
+			break;
+     	case TOKEN_DIV:
+               if ( right == 0 ){
+                    fatal("Attempting division by 0\n");
+                    assert(0);
+               }
+               return left / right;
+			break;
+     	case TOKEN_BAND:
+               return left & right;
+			break;
+     	case TOKEN_LSHIFT:
+               return left << right;
+			break;
+     	case TOKEN_RSHIFT:
+               return left >> right;
+			break;
+     	case TOKEN_ADD:
+               return left + right;
+			break;
+     	case TOKEN_XOR:
+               return left ^ right;
+			break;
+     	case TOKEN_SUB:
+               return left - right;
+			break;
+     	case TOKEN_BOR:
+               return left|right;
+			break;
+     	case TOKEN_EQ:
+               return left == right;
+			break;
+     	case TOKEN_NOTEQ:
+               return left != right;
+			break;
+     	case TOKEN_LTEQ:
+               return left <= right;
+			break;
+     	case TOKEN_GTEQ:
+               return left>=right;
+			break;
+     	case TOKEN_AND:
+               return left && right;
+			break;
+     	case TOKEN_OR:
+               return left || right;
+			break;
+     	case TOKEN_LT:
+               return left < right;
+			break;
+     	case TOKEN_GT:
+               return left > right;
+			break;
+          default:
+               assert(0);
+               break;
      }
-     return resolve_rvalue(type);
 }
 
 ResolvedExpr resolve_expr_binary(Expr *expr){
      ResolvedExpr left = resolve_expr(expr->binary_expr.left);
      ResolvedExpr right = resolve_expr(expr->binary_expr.right);
-
      if ( left.type != right.type ){
           fatal("Type of values do not match\n"); // TODO
      }
      if ( left.is_const && right.is_const ){
-          switch ( expr->binary_expr.op ){
-               case TOKEN_ADD:
-                    return resolve_const_int(left.int_val+right.int_val);
-                    break;
-               default:
-                    assert(0);
-                    break;
-          }
+          return resolve_const_int(eval_expr_binary(left.int_val,right.int_val,expr->binary_expr.op));
      } else {
           return resolve_rvalue(left.type);
      }
@@ -711,6 +808,19 @@ ResolvedExpr resolve_expr_cast(Expr *expr){
      return resolve_rvalue(cast_type);
 }
 
+ResolvedExpr resolve_expr_index(Expr *expr){
+     assert(expr->kind == EXPR_INDEX);
+     ResolvedExpr new = resolve_expr(expr->array_expr.operand);
+     ResolvedExpr index = resolve_expr(expr->array_expr.index);
+     if ( new.type->kind != TYPE_ARRAY && new.type->kind != TYPE_PTR ){
+          fatal("Attempting to index a non array and non pointer data type\n");
+          assert(0);
+     }
+     if ( index.type->kind != TYPE_INT ){
+          fatal("Array indices must be an integer!\n");
+     }
+     return resolve_lvalue(new.type->array.base_type);
+}
 ResolvedExpr resolve_expr_expected(Expr *expr,Type *expected_type){
      switch (expr->kind){
           case EXPR_INT:
@@ -719,6 +829,11 @@ ResolvedExpr resolve_expr_expected(Expr *expr,Type *expected_type){
           case EXPR_FLOAT:
                return resolve_const_float(expr->float_val);
                break;
+          case EXPR_STR:{
+               Type *type = type_ptr(type_char);
+               return resolve_rvalue(type);
+               break;
+          }
           case EXPR_NAME:
                return resolve_expr_name(expr->name);
                break;
@@ -752,6 +867,7 @@ ResolvedExpr resolve_expr_expected(Expr *expr,Type *expected_type){
                return resolve_expr_ternary(expr);
                break;
           case EXPR_INDEX:
+               return resolve_expr_index(expr);
                break;
           case EXPR_COMPOUND:
                return resolve_expr_compound(expr,expected_type);
@@ -799,13 +915,9 @@ void type_test(void){
 
 }
 
-void entity_add_type(Type *type){
+void entity_add_type(const char *name,Type *type){
      Entity *new = NULL;
-     if ( type->kind == TYPE_INT ){
-         new = new_entity(ENTITY_TYPE,str_intern("int"),NULL); 
-     } else if ( type->kind == TYPE_FLOAT ){
-         new = new_entity(ENTITY_TYPE,str_intern("float"),NULL); 
-     }
+     new = new_entity(ENTITY_TYPE,name,NULL); 
      new->state = ENTITY_RESOLVED;
      new->type = type;
      buff_push(entity_list,new);
@@ -814,10 +926,17 @@ void entity_add_type(Type *type){
 
 void resolve_test(void){
      char *list[] = { 
-          "const x = ~1;",
-          "const s = !1;",
-          "var p:int;",
-          "var b = *p;",
+          "const i = 2 + 3;",
+          "var a : int[3] = {1,2,3};",
+          "var x : int = *a;",
+          "const t = 2*3 + sizeof(x)/2 + ~1;",
+          "var m:char = \'a\';",
+          "var h = \"fuck this shit\";",
+//          "var pp = !a[0];"   
+//          "const x = +1;",
+//          "const s = ~-1;",
+//          "var p:int;",
+//          "var b = *p;",
 //          "var x = cast(int)1;",
 //          "var n:int = 1;",
  //         "const x = 1 ? n : 3;",
@@ -850,8 +969,10 @@ void resolve_test(void){
           tmp_decl = parse_decl();
           entity_add_decl(tmp_decl);
      }
-     entity_add_type(type_int);
-     entity_add_type(type_float);
+     entity_add_type(str_intern("int"),type_int);
+     entity_add_type(str_intern("float"),type_float);
+     entity_add_type(str_intern( "char" ),type_char);
+     entity_add_type(str_intern( "void" ),type_void);
      for ( Entity **it = entity_list; it != buff_end(entity_list); it++ ){
           resolve_entity(*it);
           complete_type((*it)->type);
