@@ -277,6 +277,18 @@ Entity **ordered_entities = NULL;
 ResolvedExpr resolved_null = {};
 ResolvedExpr resolve_expr(Expr *);
 ResolvedExpr resolve_expr_expected(Expr *,Type *);
+
+void duplicate_field_check(Type *type){
+     assert(type->kind == TYPE_STRUCT || type->kind == TYPE_UNION );
+     for ( TypeField *it = type->aggregate.fields;  it!= type->aggregate.fields + type->aggregate.num_fields; it++ ){
+          for ( TypeField *it2 = it+1;  it2!= type->aggregate.fields + type->aggregate.num_fields; it2++ ){
+               if ( it->name == it2->name ){
+                    fatal( "Duplicate field names in the structure %s!\n",type->entity->name );
+                    assert(0);
+               }
+          }
+     }
+}
 void complete_type_struct(Type *type,TypeField *fields, size_t num_fields){
      assert(type->kind == TYPE_COMPLETING);
      type->kind = TYPE_STRUCT;
@@ -328,7 +340,7 @@ void complete_type(Type *type){
           assert(type->entity->decl->kind = DECL_UNION );
           complete_type_struct(type,fields,buff_len(fields));
      }
-     
+     duplicate_field_check(type);            
      buff_push(ordered_entities,type->entity);
 }
 
@@ -390,7 +402,11 @@ Type *resolve_func_decl(Decl *decl){
           complete_type(tmp);
           buff_push(param_list,tmp);
      }
-     tmp = resolve_typespec(decl->func_decl.ret_type);
+     if ( decl->func_decl.ret_type ){
+          tmp = resolve_typespec(decl->func_decl.ret_type);
+     } else {
+          tmp = type_void;
+     }
      complete_type(tmp);
      tmp = type_func(param_list,decl->func_decl.num_params,tmp);
      return tmp;
@@ -689,6 +705,7 @@ ResolvedExpr resolve_expr_binary(Expr *expr){
           return resolve_rvalue(left.type);
      }
 }
+
 ResolvedExpr resolve_expr_compound(Expr *expr, Type *expected_type){
     /* 
      TypeSpec *type;
@@ -720,11 +737,47 @@ ResolvedExpr resolve_expr_compound(Expr *expr, Type *expected_type){
                fatal("Compound expr has more members than the type\n");
           }
           ResolvedExpr new = {};
+          size_t currentIndex = 0;
           for ( size_t i = 0; i < expr->compound_expr.num_args; i++ ){
-               new = resolve_expr_expected(expr->compound_expr.args[i],type);
-               if ( new.type != type->aggregate.fields[i].type ){
-                   fatal("Type mismatch for compound literal!\n"); 
-               }
+               CompoundField tmp = expr->compound_expr.fields[i];
+               if ( tmp.kind == FIELD_INDEX ){
+                    fatal("Attempt to use index initializer in a non array data type!\n");
+               } else if ( tmp.kind == FIELD_NONE ){
+                    assert(!tmp.field_expr);
+                    if ( currentIndex > type->aggregate.num_fields - 1 ){
+                         fatal("Excess initializer for struct \n");
+                    }
+                    new = resolve_expr_expected(tmp.expr,type->aggregate.fields[currentIndex].type);
+                    if ( new.type != type->aggregate.fields[currentIndex].type ){
+                         fatal("Expression and field type do not match!\n");
+                         assert(0);
+                    }
+                    currentIndex++;
+               } else {
+                    assert( tmp.kind == FIELD_NAME );
+                    if ( tmp.field_expr->kind != EXPR_NAME ){
+                         fatal("Initializer is not a name \n");
+                         assert(0);
+                    }
+                    Type *field_type = NULL;
+                    for ( size_t z = 0; z < type->aggregate.num_fields; z++ ){
+                         if ( tmp.field_expr->name == type->aggregate.fields[z].name ){
+                              currentIndex = z;
+                              field_type = type->aggregate.fields[z].type;
+                              break;
+                         }
+                    }
+                    if ( !field_type ){
+                        fatal("Field %s  does not exist in the struct.\n",tmp.field_expr->name);
+                        assert(0);
+                    }
+                    new = resolve_expr_expected(tmp.expr,field_type); 
+                    if ( new.type != field_type ){
+                         fatal("Expression and field type do not match!\n");
+                         assert(0);
+                    }
+                    currentIndex++;
+               } 
           }
      } else {
           assert(type->kind == TYPE_ARRAY );
@@ -732,11 +785,46 @@ ResolvedExpr resolve_expr_compound(Expr *expr, Type *expected_type){
                fatal("Array expression has more members than the array length\n");
           }
           ResolvedExpr new = {};
+          ResolvedExpr resolved_field_expr = {};
+          size_t currentIndex = 0;
           for ( size_t i = 0; i < expr->compound_expr.num_args; i++ ){
-               new = resolve_expr_expected(expr->compound_expr.args[i],type);
+               CompoundField tmp = expr->compound_expr.fields[i];
+               if ( tmp.kind == FIELD_INDEX ){
+                    if (!tmp.field_expr){
+                         fatal("Can't have empty field expressions!!\n");
+                         assert(0);
+                    }
+                    resolved_field_expr = resolve_expr(tmp.field_expr); 
+                    if ( resolved_field_expr.type != type_int ){
+                         fatal("Index expressions must be of type int\n");
+                    } else if ( !resolved_field_expr.is_const ){
+                         fatal("Iniializer expression for index must be a constant.\n");
+                         assert(0);
+                    }
+                    assert(resolved_field_expr.is_const);
+                    if ( resolved_field_expr.int_val < 0 ){
+                         fatal("Can\'t have negative indices in array!\n");
+                    } else {
+                         currentIndex =  resolved_field_expr.int_val;
+                         if ( currentIndex > type->array.size ){
+                              fatal("Index value exceed the array bounds!\n");
+                         }
+                    } 
+                    new = resolve_expr_expected(tmp.expr,type);
+                    currentIndex++;
+               } else {
+                    assert(tmp.kind == FIELD_NONE );
+                    if ( currentIndex > type->array.size - 1 ){
+                         fatal("Initializing out of bound!\n");
+                         
+                    }
+                    new = resolve_expr_expected(tmp.expr,type);
+                    currentIndex++;
+               }
                if ( new.type != type->array.base_type ){
                     fatal("Type mismatch with array type\n");
                }
+               
           }
      } 
      return resolve_rvalue(type);
@@ -926,12 +1014,19 @@ void entity_add_type(const char *name,Type *type){
 
 void resolve_test(void){
      char *list[] = { 
-          "const i = 2 + 3;",
-          "var a : int[3] = {1,2,3};",
-          "var x : int = *a;",
-          "const t = 2*3 + sizeof(x)/2 + ~1;",
-          "var m:char = \'a\';",
-          "var h = \"fuck this shit\";",
+//          "var k : int[8] = { [2] = 9, [7] = 7,[1] = 0};",
+          "struct Vector3 {x,y,z:int;};",
+          "struct tf {x:int;x:float;};",
+//          "var w : int *;",
+          "var r : Vector3 = { y = 2,3};",
+  //        "func foo(x:int,y:int){return;};",
+//          "const i = 2 + 3;",
+//          "var a : int[3] = {1,2,3};",
+//          "var x : int = *a;",
+//          "var o : int = cast(int)1+2;",
+//          "const t = 2*3 + sizeof(x)/2 + ~1;",
+//          "var m:char = \'a\';",
+//          "var h = \"fuck this shit\";",
 //          "var pp = !a[0];"   
 //          "const x = +1;",
 //          "const s = ~-1;",
@@ -940,14 +1035,14 @@ void resolve_test(void){
 //          "var x = cast(int)1;",
 //          "var n:int = 1;",
  //         "const x = 1 ? n : 3;",
-//          "func addV(x:Vector,y:Vector):Vector { return {p.x+q.x,p.y+q.y}; }",
+ //         "func addV(x:Vector,y:Vector):Vector { return {p.x+q.x,p.y+q.y}; }",
 //         "func add(x:int,y:int):int{ return x+y;}",
 //          "var z:int = add(1,2);",
 //          "var c:int[3] = {1,2,3};",
 //          "struct Vector { x,y:int; };",
 //          "var e:int* = &p",
 //          "var p:int = 42",
-//          "var q:Vector = {12,999}",
+//          "var q:Vector = addV({1,2},{3,4});",
 //          "var f:int[2] = (:int[2]){123,342};",
 //          "var z:Vector = Vector{x,2,3,4};",
 //
@@ -973,7 +1068,7 @@ void resolve_test(void){
      entity_add_type(str_intern("float"),type_float);
      entity_add_type(str_intern( "char" ),type_char);
      entity_add_type(str_intern( "void" ),type_void);
-     for ( Entity **it = entity_list; it != buff_end(entity_list); it++ ){
+    for ( Entity **it = entity_list; it != buff_end(entity_list); it++ ){
           resolve_entity(*it);
           complete_type((*it)->type);
      }
