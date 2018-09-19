@@ -451,13 +451,22 @@ void print_expr( Expr *expr ) {
           case EXPR_COMPOUND:
                printf("( ");
                print_type(expr->compound_expr.type);
-               printf(" (");
-               for ( Expr **it = expr->compound_expr.args; it != expr->compound_expr.args + expr->compound_expr.num_args - 1; it++ ){
-                    print_expr(*it); 
-                    printf(" ,");
+               printf("(");
+               for ( CompoundField *it = expr->compound_expr.fields; it != expr->compound_expr.fields + expr->compound_expr.num_args; it++ ){
+                    if ( it->kind != FIELD_NONE ){
+                         printf("(");
+                         print_expr(it->field_expr);
+                         printf(") = ");
+                    }
+                    print_expr(it->expr);
+                    printf("%c",it==expr->compound_expr.fields + expr->compound_expr.num_args-1?' ':','); 
                }
-               print_expr( *( expr->compound_expr.args + expr->compound_expr.num_args - 1 ) ); 
-               printf(") )");
+//               for ( Expr **it = expr->compound_expr.args; it != expr->compound_expr.args + expr->compound_expr.num_args - 1; it++ ){
+//                    print_expr(*it); 
+//                    printf(" ,");
+//               }
+//               print_expr( *( expr->compound_expr.args + expr->compound_expr.num_args - 1 ) ); 
+               printf("))");
                break; 
           case EXPR_SIZEOF_EXPR:
                printf("(sizeof ");
