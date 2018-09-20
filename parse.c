@@ -134,9 +134,11 @@ Expr *parse_expr_base(){
           size_t len = buff_len(expr_list);
           //buff_free(expr_list);
           operand = expr_call(operand,ast_expr_list,len);
-     } else if ( match_token(TOKEN_LBRACKET) ){
-          operand = expr_index(operand,parse_expr());
-          expect_token(TOKEN_RBRACKET);
+     } else if ( is_token(TOKEN_LBRACKET) ){
+          while ( match_token(TOKEN_LBRACKET) ){
+               operand = expr_index(operand,parse_expr());
+               expect_token(TOKEN_RBRACKET);
+          }
      } else if ( match_token(TOKEN_DOT) ){
           if ( is_token(TOKEN_NAME) ){
                operand = expr_field(operand,token.name);
@@ -266,10 +268,13 @@ TypeSpec *parse_type(){
      TypeSpec *type = parse_base_type();
      if ( match_token(TOKEN_MUL) ){
           type = typespec_pointer(type);
-     } else if ( match_token(TOKEN_LBRACKET) ){
-          Expr *expr = parse_expr();
-          type = typespec_array(type,expr);
-          expect_token(TOKEN_RBRACKET);
+     } else if ( is_token(TOKEN_LBRACKET) ){
+          Expr *expr = NULL;
+          while ( match_token(TOKEN_LBRACKET) ){
+               expr = parse_expr();
+               type = typespec_array(type,expr);
+               expect_token(TOKEN_RBRACKET);
+          }
      }
      return type;
 }
