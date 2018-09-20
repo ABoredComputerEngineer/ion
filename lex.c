@@ -16,8 +16,8 @@ typedef enum TokenKind{
      TOKEN_FLOAT,
      TOKEN_STR,
      TOKEN_NAME,
-     TOKEN_INC,
-     TOKEN_DEC,
+//     TOKEN_INC,
+//     TOKEN_DEC,
      // Multiplication opertors
      TOKEN_MUL,
      TOKEN_MOD,
@@ -41,6 +41,8 @@ typedef enum TokenKind{
      TOKEN_GT,
      // Assignment operators
      TOKEN_ASSIGN,
+     TOKEN_INC,
+     TOKEN_DEC,
      TOKEN_ADD_ASSIGN,
      TOKEN_MUL_ASSIGN,
      TOKEN_SUB_ASSIGN,
