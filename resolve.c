@@ -3,6 +3,9 @@
 #define CHAR_SIZE 1
 #define VOID_SIZE 0
 #define PTR_SIZE 8
+#define INT_ALIGNMENT 4
+#define FLOAT_ALIGNMENT 4
+#define PTR_ALIGNMENT 8
 
 Arena resolve_arena;
 typedef struct Type Type;
@@ -32,6 +35,7 @@ typedef struct {
 struct Type {
      TypeKind kind;
      size_t size;
+     size_t alignment;
      Entity *entity;
      union {
           struct {
@@ -113,6 +117,7 @@ Type *type_ptr(Type *base_type){
      Type *new = type_alloc(TYPE_PTR);
      new->ptr.base_type = base_type;
      new->size = PTR_SIZE;
+     new->alignment = PTR_ALIGNMENT;
      CachePtrType tmp = { new , base_type };
      buff_push(ptr_list,tmp);
      return new; 
@@ -146,6 +151,8 @@ Type *type_func(Type **param_list,size_t num_params, Type *ret_type){
      }
 
      Type *new = type_alloc(TYPE_FUNC);
+     new->size = PTR_SIZE;
+     new->alignment = PTR_ALIGNMENT;
      new->func.param_list = param_list;
      new->func.num_params = num_params;
      new->func.ret_type = ret_type;
@@ -172,6 +179,7 @@ Type *type_array(Type *base_type, size_t size ){
      Type *new = type_alloc(TYPE_ARRAY);
      new->array.base_type = base_type;
      new->size = size * base_type->size;
+     new->alignment = base_type->alignment;
      new->array.size = size;
      CacheArrayType tmp = { new,base_type,size };
      buff_push(array_list,tmp);
@@ -184,9 +192,9 @@ Type *type_incomplete(Entity *entity){
      return new;
 }
 
-Type INT_TYPE = { TYPE_INT, INT_SIZE};
-Type FLOAT_TYPE = {TYPE_FLOAT, FLOAT_SIZE};
-Type CHAR_TYPE = { TYPE_CHAR, CHAR_SIZE};
+Type INT_TYPE = { TYPE_INT, INT_SIZE, .alignment = INT_ALIGNMENT};
+Type FLOAT_TYPE = {TYPE_FLOAT, FLOAT_SIZE, .alignment = FLOAT_ALIGNMENT};
+Type CHAR_TYPE = { TYPE_CHAR, CHAR_SIZE}; 
 Type VOID_TYPE = { TYPE_CHAR, VOID_SIZE};
 
 Type *type_int = &INT_TYPE;
@@ -293,9 +301,11 @@ void complete_type_struct(Type *type,TypeField *fields, size_t num_fields){
      assert(type->kind == TYPE_COMPLETING);
      type->kind = TYPE_STRUCT;
      type->size = 0;
+     for ( size_t i = 0; i < num_fields-1; i++ ){
+          type->alignment = MAX(fields[i].type->alignment, fields[i+1].type->alignment);
+     }
      for ( size_t i = 0; i < num_fields; i++ ){
-          //   TODO : Alignment
-          type->size += fields[i].type->size;
+          type->size += ALIGN_UP(fields[i].type->size,type->alignment);
      }
      type->aggregate.fields = arena_dup(&resolve_arena,fields,sizeof(*fields)*num_fields);
      type->aggregate.num_fields = num_fields; 
@@ -305,10 +315,11 @@ void complete_type_union(Type *type, TypeField *fields, size_t num_fields){
      assert(type->kind == TYPE_COMPLETING);
      type->kind = TYPE_UNION;
      type->size = 0;
-     for ( size_t i = 0; i < num_fields; i++ ){
-          //   TODO : Alignment
+     for ( size_t i = 0; i < num_fields - 1; i++ ){
+          type->alignment = MAX(fields[i].type->alignment, fields[i+1].type->alignment);
           type->size = MAX(type->size, fields[i].type->size);
      }
+     type->size = ALIGN_UP(MAX(type->size,fields[num_fields-1].type->size), type->alignment);
      type->aggregate.fields = arena_dup(&resolve_arena,fields,sizeof(*fields)*num_fields);
      type->aggregate.num_fields = num_fields;
 }
@@ -338,7 +349,7 @@ void complete_type(Type *type){
           complete_type_struct(type,fields,buff_len(fields));
      } else {
           assert(type->entity->decl->kind = DECL_UNION );
-          complete_type_struct(type,fields,buff_len(fields));
+          complete_type_union(type,fields,buff_len(fields));
      }
      duplicate_field_check(type);            
      buff_push(ordered_entities,type->entity);
@@ -353,6 +364,9 @@ int64_t resolve_int_const_expr(Expr *expr){
 }
 
 Type *resolve_typespec(TypeSpec *typespec){
+     if ( !typespec ){
+          return type_void;
+     }
      switch ( typespec->kind ){
 
           case TYPESPEC_NAME:{
@@ -430,7 +444,9 @@ Type *resolve_var_decl(Decl *decl){
      if  ( decl->var_decl.type ){
           type = resolve_typespec(decl->var_decl.type);
      }
-
+     if ( type == type_void ){
+          fatal("Cant have void data types!\n");
+     }
      if ( decl->var_decl.expr ){
           ResolvedExpr result = resolve_expr_expected(decl->var_decl.expr,type);
           if ( type && result.type != type ){
@@ -810,7 +826,6 @@ ResolvedExpr resolve_expr_compound(Expr *expr, Type *expected_type){
                               fatal("Index value exceed the array bounds!\n");
                          }
                     } 
-                    new = resolve_expr_expected(tmp.expr,type);
                     currentIndex++;
                } else {
                     assert(tmp.kind == FIELD_NONE );
@@ -818,9 +833,9 @@ ResolvedExpr resolve_expr_compound(Expr *expr, Type *expected_type){
                          fatal("Initializing out of bound!\n");
                          
                     }
-                    new = resolve_expr_expected(tmp.expr,type);
                     currentIndex++;
                }
+               new = resolve_expr_expected(tmp.expr,type->array.base_type);
                if ( new.type != type->array.base_type ){
                     fatal("Type mismatch with array type\n");
                }
@@ -1014,12 +1029,20 @@ void entity_add_type(const char *name,Type *type){
 
 void resolve_test(void){
      char *list[] = { 
+          "var t:void = 32;",
+          "struct notVector { x :int ;};",
+          "func addV(x:Vector,y:Vector):Vector { return {p.x+q.x,p.y+q.y}; }",
+//          "var v : Vector = addV( {1,2,3},{1,2} );",
+//          "struct values { x:int; z : Vector;};",
+          "struct Vector { x,y:int; };",
+//          "var x:Vector[3] = { [1] = {1,2},[2]= {3,4} };" ,
+//          "var j : Vector[2][2] = { { {1,2},{3,4} }, { {4,5}, {5,6} } };",
 //          "var k : int[8] = { [2] = 9, [7] = 7,[1] = 0};",
-          "struct Vector3 {x,y,z:int;};",
-          "struct tf {x:int;x:float;};",
+ //         "struct Vector3 {x,y,z:int;};",
+ //         "struct tf {x:int;x:float;};",
 //          "var w : int *;",
-          "var r : Vector3 = { y = 2,3};",
-  //        "func foo(x:int,y:int){return;};",
+//          "var r : Vector3 = { y = 2,3};",
+        "func foo(x:int,y:int){return;};",
 //          "const i = 2 + 3;",
 //          "var a : int[3] = {1,2,3};",
 //          "var x : int = *a;",
@@ -1039,7 +1062,6 @@ void resolve_test(void){
 //         "func add(x:int,y:int):int{ return x+y;}",
 //          "var z:int = add(1,2);",
 //          "var c:int[3] = {1,2,3};",
-//          "struct Vector { x,y:int; };",
 //          "var e:int* = &p",
 //          "var p:int = 42",
 //          "var q:Vector = addV({1,2},{3,4});",
@@ -1075,6 +1097,7 @@ void resolve_test(void){
 
      for ( Entity **it = ordered_entities; it != buff_end(ordered_entities); it++ ){
           print_decl( (*it)->decl );
+          printf("\nAlignment: %zu, Size: %zu\n", (*it)->type->alignment,(*it)->type->size); 
           printf("\n");
      }
 }
