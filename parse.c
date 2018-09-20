@@ -672,7 +672,7 @@ void parse_test(){
 //          "func fact(x:int):int{while(x!=1){product*=x;x = x - 1 ;}}",
 //          "const x = sizeof(:int)",
 //          "var x:int = sizeof(3)",
-//          "func addx(x:int):int{var y:int= 2; x+=2 ; return x ;}",
+          "func addx(x:int):int{var y:int= 2; x+=2 ; return x ;}",
 //          "func addx(x:int):int{var y:int= 2; x+=2 ; return ;}"
           //"var x = ",
          // "func fact(x:int):int{2;}"
