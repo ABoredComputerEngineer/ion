@@ -477,8 +477,8 @@ void resolve_stmt_decl(Decl *decl){
           }
           case DECL_STRUCT:
           case DECL_UNION:{
+               sym->kind = SYM_TYPE;
                type = type_incomplete(sym);
-               return;
                break;
           }
           default:
@@ -1247,16 +1247,17 @@ void sym_add_type(const char *name,Type *type){
 
 void resolve_test(void){
      char *list[] = { 
-        "struct Vector { x, y: int; }",
-        "var i: int",
-        "func f1() { v := Vector{1, 2}; j := i; i++; j++; v.x = 2*j; }",
-        "func f2(n: int): int { return 2*n; }",
-        "func f3(x: int): int { if (x) { return -x; } else if (x % 2 == 0) { return 42; } else { return -1; } }",
-        "func f4(n: int): int { for (i := 0; i < n; i++) { if (i % 3 == 0) { return n; } } return 0; }",
-        "func f5(x: int): int { switch(x) { case 0: case 1: return 42; case 3:default: return -1; } }",
-        "func f6(n: int): int { p := 1; while (n) { p *= 2; n--; } return p; }",
-        "func f7(n: int): int { var p:int = 1;do { p *= 2; n--; } while (n); return p; }",
-        "func add(v: Vector, w: Vector): Vector { return {v.x + w.x, v.y + w.y}; }",
+ //       "struct Vector { x, y: int; }",
+ //       "var i: int",
+//        "func f1() { v := Vector{1, 2}; j := i; i++; j++; v.x = 2*j; }",
+        "func f2(n: int): int { struct S { x:int; y :int; }; var x : S = { 1, 2};return 2*n; }",
+        "var x:S = {1,2}",
+//        "func f3(x: int): int { if (x) { return -x; } else if (x % 2 == 0) { return 42; } else { return -1; } }",
+//        "func f4(n: int): int { for (i := 0; i < n; i++) { if (i % 3 == 0) { return n; } } return 0; }",
+//        "func f5(x: int): int { switch(x) { case 0: case 1: return 42; case 3:default: return -1; } }",
+//        "func f6(n: int): int { p := 1; while (n) { p *= 2; n--; } return p; }",
+//        "func f7(n: int): int { var p:int = 1;do { p *= 2; n--; } while (n); return p; }",
+//        "func add(v: Vector, w: Vector): Vector { return {v.x + w.x, v.y + w.y}; }",
           
   //        "const u = 2;",
  //         "func fact(x:int):int{var i:int = u ;product := 1; while(x!=1){product*=x;x = x - 1 ;} var e : int = i;return x;}",
