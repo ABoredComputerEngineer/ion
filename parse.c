@@ -43,9 +43,9 @@ Expr *parse_expr_compound(TypeSpec *type){
      }
      expect_token(TOKEN_RBRACE);
      size_t len = buff_len(field_list);
-     field_list = ast_dup(field_list,buff_sizeof(field_list));
-     //buff_free(expr_list); 
-     return expr_compound( type,field_list,len);
+     CompoundField *new_list = ast_dup(field_list,buff_sizeof(field_list));
+     buff_free(field_list); 
+     return expr_compound( type,new_list,len);
      
 }
 
@@ -116,6 +116,7 @@ Expr **parse_expr_list(){
      }
      Expr **ast_expr_list = ast_dup(list,buff_sizeof(list));
 //     size_t len = buff_len(expr_list);
+     buff_free(list);
      return ast_expr_list;
 }
 
@@ -132,7 +133,7 @@ Expr *parse_expr_base(){
           expect_token(TOKEN_RPAREN);
           Expr **ast_expr_list = ast_dup(expr_list,buff_sizeof(expr_list));
           size_t len = buff_len(expr_list);
-          //buff_free(expr_list);
+          buff_free(expr_list);
           operand = expr_call(operand,ast_expr_list,len);
      } else if ( is_token(TOKEN_LBRACKET) ){
           while ( match_token(TOKEN_LBRACKET) ){
@@ -253,7 +254,7 @@ TypeSpec *parse_base_type(){
           expect_token(TOKEN_COLON);
           TypeSpec **ast_list = ast_dup(typespec_list,buff_sizeof(typespec_list));
           size_t len = buff_len(typespec_list);
-          //buff_free(typespec_list);
+          buff_free(typespec_list);
           TypeSpec *ret_type = parse_type();
           return typespec_func(ast_list,len,ret_type);
      } else {
@@ -266,8 +267,10 @@ TypeSpec *parse_base_type(){
 
 TypeSpec *parse_type(){
      TypeSpec *type = parse_base_type();
-     if ( match_token(TOKEN_MUL) ){
-          type = typespec_pointer(type);
+     if ( is_token(TOKEN_MUL) ){
+          while ( match_token(TOKEN_MUL) ){
+               type = typespec_pointer(type);
+          }
      } else if ( is_token(TOKEN_LBRACKET) ){
           Expr *expr = NULL;
           while ( match_token(TOKEN_LBRACKET) ){
@@ -394,7 +397,7 @@ Decl *parse_enum(){
 //     new_enum->enum_decl.enum_items = enum_item_list;
  //    new_enum->enum_decl.num_enum_items = buff_len(enum_item_list);
      new_enum->enum_decl.num_enum_items = buff_len(enum_item_list);
-     //buff_free(enum_item_list);
+     buff_free(enum_item_list);
     return new_enum; 
 }
 
@@ -434,7 +437,7 @@ StmtBlock parse_stmt_block(){
      }
      block.num_stmts = buff_len(stmt_list);
      block.stmts = ast_dup(stmt_list,buff_sizeof(stmt_list));
-     //buff_free(stmt_list); 
+     buff_free(stmt_list); 
      expect_token(TOKEN_RBRACE);
      return block;
 }
@@ -453,7 +456,7 @@ Case parse_switch_case(){
      }
      new_case.expr_list = ast_dup( expr_list, buff_sizeof(expr_list) );
      new_case.num_expr = buff_len(expr_list);
-     //buff_free(expr_list);
+     buff_free(expr_list);
      if ( match_keyword(default_keyword) ){
           if ( is_default ){
                syntax_error("Cant have duplicate definitions of default in same case\n");
@@ -468,7 +471,7 @@ Case parse_switch_case(){
      block.stmts = ast_dup(stmt_list,buff_sizeof(stmt_list));
      block.num_stmts = buff_len(stmt_list);
      new_case.case_block = block;
-     //buff_free(stmt_list);
+     buff_free(stmt_list);
      return new_case;
      
 }
@@ -485,7 +488,7 @@ Stmt *parse_stmt_switch(){
      expect_token(TOKEN_RBRACE);
      Case *ast_list= ast_dup(case_list,buff_sizeof(case_list));
      size_t len = buff_len(case_list);
-     //buff_free(case_list);
+     buff_free(case_list);
      return stmt_switch(expr,len,ast_list);
 }
 
@@ -634,7 +637,7 @@ void parse_test(){
      use_buff_print = true;
      char *parse_string[] = {
 //          "var x:(func (char,char):int) = 12",
-//          "enum abc { FUCK, THIS = 23, SHIT, YOU = 12, FUCKING= 14, ASS = 9}",
+          "enum abc { FUCK, THIS = 23, SHIT, YOU = 12, FUCKING= 14, ASS = 9}",
           "struct abc { x,y:int; z:char;} ",
           "union abc { x,y:int; z:char;} ",
 //          "var x:int = 1234",
