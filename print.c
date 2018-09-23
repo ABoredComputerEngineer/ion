@@ -3,18 +3,18 @@ char *print_buffer;
 bool use_buff_print ;
 #define printf(...) ( use_buff_print ? (void)buff_printf(print_buffer,__VA_ARGS__) : (void)printf(__VA_ARGS__) )
 
-void flush_print_buff(FILE *file){
-     if ( print_buffer ){
+void flush_buff(FILE *file,char *buffer){
+     if ( buffer ){
           if ( file ){
-               fputs(print_buffer,file);
+               fputs(buffer,file);
           }
-          buff_clear(print_buffer);
+          buff_clear(buffer);
      }
 }
 // Print Functios [prnfunc]
 #define print_newline  printf("\n%.*s",indent,indent_string),assert(indent>=0)
 void print_expr(Expr *);
-void print_type(TypeSpec *);
+void print_typespec(TypeSpec *);
 void print_decl(Decl *);
 void print_stmt(Stmt *);
 void print_name_list( const char **names, size_t num_names ){
@@ -258,7 +258,7 @@ void print_decl(Decl *decl){ // TODO : Add print StmtBlock to func declarations
      switch ( decl->kind ){
           case DECL_ENUM:{
                enum_def new = decl->enum_decl;
-               printf("(enum  %s ", decl->name);
+               printf("(enum  %s ", (decl->name)?decl->name:"");
                indent++;
                for ( enum_item *it = new.enum_items; it != new.enum_items + new.num_enum_items ; it++){
                     print_newline;
@@ -283,7 +283,7 @@ void print_decl(Decl *decl){ // TODO : Add print StmtBlock to func declarations
                          print_newline;
                          print_name_list( (it)->name_list, (it)->num_names );
                          printf(":");
-                         print_type( (it)->type );
+                         print_typespec( (it)->type );
                     }
                     indent--;
                     printf("\n)");
@@ -294,7 +294,7 @@ void print_decl(Decl *decl){ // TODO : Add print StmtBlock to func declarations
                     printf("(var %s",decl->name );
                     if ( decl->var_decl.type != NULL ){
                          printf(":");
-                         print_type(decl->var_decl.type);
+                         print_typespec(decl->var_decl.type);
                     } else {
                          printf(":nil");
                     }
@@ -312,7 +312,7 @@ void print_decl(Decl *decl){ // TODO : Add print StmtBlock to func declarations
                break;
           case DECL_TYPEDEF:
                printf("(typedef %s ",decl->name);
-               print_type(decl->typedef_decl.type);
+               print_typespec(decl->typedef_decl.type);
                printf(" )");
                break;
           case DECL_FUNC:
@@ -321,13 +321,13 @@ void print_decl(Decl *decl){ // TODO : Add print StmtBlock to func declarations
                     printf("(func %s ( ", decl->name );
                     for (func_param *it = tmp.param_list; it!=tmp.param_list+tmp.num_params; it++ ){
                          printf("(%s:", (it)->name );
-                         print_type((it)->type);
+                         print_typespec((it)->type);
                          printf(") ");
                     }
                     printf(")");
                     if ( tmp.ret_type ) { // type is not NULL i.e there is a return type
                          printf(" : ");
-                         print_type(tmp.ret_type);
+                         print_typespec(tmp.ret_type);
                     }
                     
                     printf(" )");
@@ -343,7 +343,7 @@ void print_decl(Decl *decl){ // TODO : Add print StmtBlock to func declarations
                break;           
      }
 }
-void print_type(TypeSpec *type){
+void print_typespec(TypeSpec *type){
      if ( type == NULL ){
           return;
      }
@@ -353,14 +353,14 @@ void print_type(TypeSpec *type){
                break;
           case TYPESPEC_ARRAY:
                printf("(array ");
-               print_type( type->array.base_type );
+               print_typespec( type->array.base_type );
                printf("[");
                print_expr(type->array.size);
                printf("])");
                break;
           case TYPESPEC_POINTER:
                printf("(ptr ");
-               print_type(type->ptr.base_type);
+               print_typespec(type->ptr.base_type);
                printf(")");
                break;
           case TYPESPEC_FUNC:{
@@ -368,10 +368,10 @@ void print_type(TypeSpec *type){
                printf("(func (");
                for ( TypeSpec **it = fn.args; it != fn.args + fn.num_args ; it++){
                     printf(" ");
-                    print_type(*it);
+                    print_typespec(*it);
                }
                printf("):");
-               print_type(fn.ret_type); 
+               print_typespec(fn.ret_type); 
                printf(")");
                break;
           }
@@ -410,7 +410,7 @@ void print_expr( Expr *expr ) {
                break;
           case EXPR_CAST:
                printf("(cast ");
-               print_type(expr->cast_expr.cast_type);
+               print_typespec(expr->cast_expr.cast_type);
                printf(" ");
                print_expr(expr->cast_expr.expr);
                printf(")");
@@ -450,7 +450,7 @@ void print_expr( Expr *expr ) {
                break;
           case EXPR_COMPOUND:
                printf("( ");
-               print_type(expr->compound_expr.type);
+               print_typespec(expr->compound_expr.type);
                printf("(");
                for ( CompoundField *it = expr->compound_expr.fields; it != expr->compound_expr.fields + expr->compound_expr.num_args; it++ ){
                     if ( it->kind != FIELD_NONE ){
@@ -475,7 +475,7 @@ void print_expr( Expr *expr ) {
                break;
           case EXPR_SIZEOF_TYPE:
                printf("(sizeof ");
-               print_type(expr->sizeof_type);
+               print_typespec(expr->sizeof_type.type);
                printf(")");
                break;
           default:
