@@ -8,8 +8,6 @@
 #define PTR_ALIGNMENT 8
 
 Arena resolve_arena;
-typedef struct Type Type;
-typedef struct Sym Sym;
 typedef enum TypeKind {
      TYPE_NONE,
      TYPE_INCOMPLETE,
@@ -18,6 +16,7 @@ typedef enum TypeKind {
      TYPE_INT,
      TYPE_FLOAT,
      TYPE_CHAR,
+     TYPE_VOID,
      TYPE_PTR,
      TYPE_ARRAY,
      TYPE_FUNC,
@@ -195,7 +194,7 @@ Type *type_incomplete(Sym *sym){
 Type INT_TYPE = { TYPE_INT, INT_SIZE, .alignment = INT_ALIGNMENT};
 Type FLOAT_TYPE = {TYPE_FLOAT, FLOAT_SIZE, .alignment = FLOAT_ALIGNMENT};
 Type CHAR_TYPE = { TYPE_CHAR, CHAR_SIZE}; 
-Type VOID_TYPE = { TYPE_CHAR, VOID_SIZE};
+Type VOID_TYPE = { TYPE_VOID, VOID_SIZE};
 Type ENUM_TYPE  = { TYPE_ENUM, INT_SIZE , .alignment = INT_ALIGNMENT };
 Type *type_int = &INT_TYPE;
 Type *type_float = &FLOAT_TYPE;
@@ -254,6 +253,7 @@ Sym *sym_add_decl(Decl *decl){
           fatal("Duplicate var names, %s\n",decl->name);
           assert(0);
      } 
+     extern void sym_add_type(const char *,Type *);
      SymKind kind = SYM_NONE;
      switch ( decl->kind ){
           case DECL_ENUM:
@@ -290,8 +290,11 @@ Sym *sym_add_decl(Decl *decl){
      if  ( decl->kind == DECL_ENUM ){
           Sym *tmp;
           for ( size_t i = 0; i < decl->enum_decl.num_enum_items; i++ ){
-              tmp = new_sym(SYM_ENUM_CONST,decl->enum_decl.enum_items[i].name,decl);
-              buff_push(global_sym_list,tmp); 
+               tmp = new_sym(SYM_ENUM_CONST,decl->enum_decl.enum_items[i].name,decl);
+               tmp->state = SYM_RESOLVED;
+               tmp->type = type_int;
+               buff_push(global_sym_list,tmp); 
+          
           }
      }
      return new;
@@ -432,9 +435,12 @@ Type *resolve_typespec(TypeSpec *typespec){
                return type_func(args,typespec->func.num_args,ret_type);
 	          break;
           }
-          case TYPESPEC_ARRAY:
-               return type_array(resolve_typespec(typespec->array.base_type), resolve_int_const_expr(typespec->array.size));
+          case TYPESPEC_ARRAY:{
+               Type *type = resolve_typespec(typespec->array.base_type);
+               complete_type(type);
+               return type_array(type, resolve_int_const_expr(typespec->array.size));
 	          break;
+          }
           case TYPESPEC_POINTER:
                return type_ptr(resolve_typespec(typespec->ptr.base_type));
                break;
@@ -487,6 +493,7 @@ void resolve_stmt_decl(Decl *decl){
      }
      sym->state = SYM_RESOLVED;
      sym->type = type;
+     decl->sym = sym;
      sym_push(sym);
 }
 void resolve_cond_expr(Expr *cond_expr){
@@ -500,7 +507,9 @@ void resolve_stmt(Stmt *stmt, Type *ret_type){
      switch ( stmt->kind ){
           case STMT_INIT:{
                ResolvedExpr new = resolve_expr(stmt->init_stmt.rhs);
-               sym_push(sym_var(stmt->init_stmt.name,new.type));
+               Sym *sym =sym_var(stmt->init_stmt.name,new.type); 
+               sym_push(sym);
+               stmt->init_stmt.sym = sym;
 			break;
           }
           case STMT_EXPR:
@@ -669,8 +678,11 @@ Type *resolve_var_decl(Decl *decl){
 
 
 Type *resolve_type_decl(Decl *decl){
-     assert(decl->kind == DECL_TYPEDEF);
-     return resolve_typespec(decl->typedef_decl.type);
+     if (decl->kind == DECL_TYPEDEF){
+          return resolve_typespec(decl->typedef_decl.type);
+     } else if ( decl->kind = DECL_ENUM ){
+          return type_int;
+     }
 }
 
 void *resolve_sym(Sym *sym){
@@ -702,11 +714,14 @@ void *resolve_sym(Sym *sym){
          case SYM_FUNC:
               sym->type = resolve_func_decl(sym->decl);
               break;
+          case SYM_ENUM_CONST:
+               break;
          default:
                assert(0);
                break;
      }
      sym->state = SYM_RESOLVED;
+     sym->decl->sym  = sym;
      buff_push(ordered_syms,sym);
 }
 
@@ -759,7 +774,9 @@ ResolvedExpr resolve_expr_name(const char *name){
           return resolve_const_int(new->val);
      } else if ( new->kind == SYM_FUNC){
           return resolve_rvalue(new->type);
-     }else {
+     } else if ( new->kind == SYM_ENUM_CONST ){
+          return resolve_rvalue(new->type);
+     } else {
           fatal("name should be a var or a constant\n");
      }
      return resolve_null;
@@ -834,7 +851,7 @@ ResolvedExpr resolve_expr_unary(Expr *expr){
                if ( !new.is_lvalue ){
                     fatal("Trying to reference a non lvalue expression!\n");
                }
-               return resolve_rvalue(type);
+               return resolve_rvalue(type_ptr(type));
                break;
           default:{
                if ( new.is_const ){
@@ -1045,7 +1062,10 @@ ResolvedExpr resolve_expr_compound(Expr *expr, Type *expected_type){
                          }
                     } 
                     currentIndex++;
-               } else {
+               }  else if ( tmp.kind == FIELD_NAME ){
+                    fatal("Attempt to use field initializer in a non struct or union type!\n");
+                    assert(0);
+               }else {
                     assert(tmp.kind == FIELD_NONE );
                     if ( currentIndex > type->array.size - 1 ){
                          fatal("Initializing out of bound!\n");
@@ -1060,6 +1080,7 @@ ResolvedExpr resolve_expr_compound(Expr *expr, Type *expected_type){
                
           }
      } 
+     expr->compound_expr.resolved_type = type;
      return resolve_rvalue(type);
 }
 
@@ -1126,6 +1147,7 @@ ResolvedExpr resolve_expr_cast(Expr *expr){
      } else {
           fatal("Invalid cast type!\n");
      }
+     expr->cast_expr.resolved_type = cast_type;
      return resolve_rvalue(cast_type);
 }
 
@@ -1173,8 +1195,9 @@ ResolvedExpr resolve_expr_expected(Expr *expr,Type *expected_type){
                break;
           }
           case EXPR_SIZEOF_TYPE:{
-               Type *type = resolve_typespec(expr->sizeof_type);
+               Type *type = resolve_typespec(expr->sizeof_type.type);
                complete_type(type);
+               expr->sizeof_type.resolved_type = type;
                return resolve_const_int(type->size);
                break;
           }
@@ -1246,15 +1269,24 @@ void sym_add_type(const char *name,Type *type){
 
 
 void resolve_test(void){
-     char *list[] = { 
+     init_intern_keyword();
+     sym_add_type(str_intern("int"),type_int);
+     sym_add_type(str_intern("float"),type_float);
+     sym_add_type(str_intern( "char" ),type_char);
+     sym_add_type(str_intern( "void" ),type_void);
+     char *list[] = {
+          "var x : Vector = {1,2};",
+          "struct Vector { x,y:int ; };",
+     };
+/*     char *list[] = { 
  //       "struct Vector { x, y: int; }",
  //       "var i: int",
 //        "func f1() { v := Vector{1, 2}; j := i; i++; j++; v.x = 2*j; }",
         "func f2(n: int): int { struct S { x:int; y :int; }; var x : S = { 1, 2};return 2*n; }",
-        "var x:S = {1,2}",
+      "var x:int**;",
 //        "func f3(x: int): int { if (x) { return -x; } else if (x % 2 == 0) { return 42; } else { return -1; } }",
 //        "func f4(n: int): int { for (i := 0; i < n; i++) { if (i % 3 == 0) { return n; } } return 0; }",
-//        "func f5(x: int): int { switch(x) { case 0: case 1: return 42; case 3:default: return -1; } }",
+        "func f5(x: int): int { switch(x) { case 0: case 1: return 42; case 3:default: return -1; } }",
 //        "func f6(n: int): int { p := 1; while (n) { p *= 2; n--; } return p; }",
 //        "func f7(n: int): int { var p:int = 1;do { p *= 2; n--; } while (n); return p; }",
 //        "func add(v: Vector, w: Vector): Vector { return {v.x + w.x, v.y + w.y}; }",
@@ -1262,25 +1294,25 @@ void resolve_test(void){
   //        "const u = 2;",
  //         "func fact(x:int):int{var i:int = u ;product := 1; while(x!=1){product*=x;x = x - 1 ;} var e : int = i;return x;}",
           
-//          "var t:void = 32;",
-//          "struct notVector { x :int ;};",
-//          "func addV(x:Vector,y:Vector):Vector { return {p.x+q.x,p.y+q.y}; }",
-//          "var v : Vector = addV( {1,2,3},{1,2} );",
-//          "struct values { x:int; z : Vector;};",
-//          "var x:Vector[3] = { [1] = {1,2},[2]= {3,4} };" ,
-//          "var j : Vector[2][2] = { { {1,2},{3,4} }, { {4,5}, {5,6} } };",
-//          "var k : int[8] = { [2] = 9, [7] = 7,[1] = 0};",
- //         "struct Vector3 {x,y,z:int;};",
- //         "struct tf {x:int;x:float;};",
-//          "var w : int *;",
-//          "var r : Vector3 = { y = 2,3};",
-//        "func foo(x:int,y:int){return;};",
-//          "const i = 2 + 3;",
-//          "var a : int[3] = {1,2,3};",
-//          "var x : int = *a;",
-//          "var o : int = cast(int)1+2;",
-//          "const t = 2*3 + sizeof(x)/2 + ~1;",
-//          "var m:char = \'a\';",
+          taHHvar t:void = 32;",
+          "struct notVector { x :int ;};",
+          "func addV(x:Vector,y:Vector):Vector { return {p.x+q.x,p.y+q.y}; }",
+          "var v : Vector = addV( {1,2,3},{1,2} );",
+          "struct values { x:int; z : Vector;};",
+          "var x:Vector[3] = { [1] = {1,2},[2]= {3,4} };" ,
+          "var j : Vector[2][2] = { { {1,2},{3,4} }, { {4,5}, {5,6} } };",
+          "var k : int[8] = { [2] = 9, [7] = 7,[1] = 0};",
+         "struct Vector3 {x,y,z:int;};",
+         "struct tf {x:int;x:float;};",
+          "var w : int *;",
+          "var r : Vector3 = { y = 2,3};",
+        "func foo(x:int,y:int){return;};",
+          "const i = 2 + 3;",
+          "var a : int[3] = {1,2,3};",
+          "var x : int = *a;",
+          "var o : int = cast(int)1+2;",
+          "const t = 2*3 + sizeof(x)/2 + ~1;",
+          "var m:char = \'a\';",
 //          "var h = \"fuck this shit\";",
 //          "var pp = !a[0];"   
 //          "const x = +1;",
@@ -1318,10 +1350,6 @@ void resolve_test(void){
           tmp_decl = parse_decl();
           sym_add_decl(tmp_decl);
      }
-     sym_add_type(str_intern("int"),type_int);
-     sym_add_type(str_intern("float"),type_float);
-     sym_add_type(str_intern( "char" ),type_char);
-     sym_add_type(str_intern( "void" ),type_void);
     for ( Sym **it = global_sym_list; it != buff_end(global_sym_list); it++ ){
           resolve_sym(*it);
           if ( (*it)->kind == SYM_FUNC ){
@@ -1335,4 +1363,4 @@ void resolve_test(void){
           printf("\nAlignment: %zu, Size: %zu\n", (*it)->type->alignment,(*it)->type->size); 
           printf("\n");
      }
-}
+*/}
