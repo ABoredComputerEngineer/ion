@@ -168,7 +168,7 @@ Expr *expr_sizeof_expr(Expr *expr){
 
 Expr *expr_sizeof_type(TypeSpec *type){
      Expr *new= expr_new(EXPR_SIZEOF_TYPE);
-     new->sizeof_type = type;
+     new->sizeof_type.type = type;
      return new;
 }
 

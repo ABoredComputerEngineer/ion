@@ -1,4 +1,6 @@
 
+typedef struct Type Type;
+typedef struct Sym Sym;
 typedef struct Decl Decl;
 typedef struct Expr Expr;
 typedef struct Stmt Stmt;
@@ -15,7 +17,6 @@ enum TypeSpecKind {
      TYPESPEC_ARRAY,
      TYPESPEC_POINTER
 };
-
 typedef struct func_typespec{
      BUF( TypeSpec **args;) // Buffer to hold the data type of arguments given to a function ) )
      size_t num_args;
@@ -134,6 +135,7 @@ typedef struct var_def {
 
 struct Decl{
      DeclKind kind;
+     Sym *sym;
      const char *name;
      union {
           enum_def enum_decl;
@@ -195,6 +197,7 @@ typedef struct compound_def{
      /*
       * Support for compound field assignment like { [23] = 23 } and { val = 2 }
       */
+     Type *resolved_type;
      TypeSpec *type;
      size_t num_args;
      CompoundField *fields;
@@ -202,11 +205,12 @@ typedef struct compound_def{
 } compound_def;
 
 typedef struct cast_def{
+     Type *resolved_type;
      TypeSpec *cast_type;
      Expr *expr;
 } cast_def;
 
-
+// [exprdef]
 struct Expr {
      ExprKind kind;
      union {
@@ -215,7 +219,10 @@ struct Expr {
           const char *str_val;
           const char *name;
           Expr *sizeof_expr;
-          TypeSpec *sizeof_type;
+          struct {
+               Type *resolved_type;
+               TypeSpec *type;
+          } sizeof_type;
           unary_def unary_expr;
           array_def array_expr;
           field_def field_expr;
@@ -288,10 +295,12 @@ typedef struct stmt_while_def {
 } stmt_while_def;
 
 typedef struct stmt_init_def{
+     Sym *sym;
      const char *name;
      Expr *rhs;
 } stmt_init_def;
 
+//[stmtdef]
 struct Stmt{
      StmtKind kind;
 //     Expr *expr; //  for statements like for, while ,return, switch do while etc, cond expression for if .
@@ -299,7 +308,6 @@ struct Stmt{
      union {
           stmt_return_def return_stmt;
           stmt_while_def while_stmt;
-                    
           stmt_if_def if_stmt;
           stmt_for_def for_stmt;
           stmt_switch_def switch_stmt;

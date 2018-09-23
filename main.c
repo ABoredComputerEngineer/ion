@@ -17,18 +17,21 @@
 #include "ast.c"
 #include "parse.c"
 #include "resolve.c"
+#include "gen.c"
+//#include "new_gen.c"
 
 void run_tests(void){
-     buff_test();
-     str_intern_test();
-     lex_test();
-     arena_test();
-     ast_test();
-     parse_test();
-     type_test(); 
+//     buff_test();
+//     str_intern_test();
+//     lex_test();
+//     arena_test();
+//     ast_test();
+//     parse_test();
+//     type_test(); 
      resolve_test();
 //     order_test();
-     flush_print_buff(stdout);
+    gen_test();
+     flush_buff(stdout,print_buffer);
 }
 
 int main(int argc, char **argv){
