@@ -27,7 +27,7 @@ typedef struct buffHdr {
 
 
 #define buff_push(b,...) ( buff_fit(( b ),1) , (b)[buff_hdr(( b ))->len++] = ( __VA_ARGS__ )  )
-#define buff_free(b) ( (( b ))?free(buff_hdr(( b ))):0 )
+#define buff_free(b) ( (( b ))?free(buff_hdr(( b ))),b = NULL:0 )
 #define buff_sizeof(b) ( (b)?buff_len(b)*sizeof(*b):0 )
 
 #define buff_printf(b,...) ( (b) = print_buff( (b) , __VA_ARGS__ ) )
@@ -105,7 +105,7 @@ char *print_buff(char *buffer, const char *fmt,...){
           cap = buff_cap(buffer)-buff_len(buffer)*sizeof(*buffer);
           dest = buff_end(buffer) ;
           new = 1+vsnprintf(dest,cap,fmt,args);
-          assert(new<cap);
+          assert(new<=cap);
      }
      buff_hdr(buffer)->len += new-1;
      return buffer;
@@ -128,6 +128,7 @@ void buff_test(void){
      printf("%s",str);
      assert(  str[strlen(str)] == 0 );
      buff_free(str);
+     assert(str == NULL);
      buff_free(xz);
      return;
 }
