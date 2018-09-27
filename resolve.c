@@ -7,6 +7,7 @@
 #define FLOAT_ALIGNMENT 4
 #define PTR_ALIGNMENT 8
 
+#include "list.c"
 Arena resolve_arena;
 typedef enum TypeKind {
      TYPE_NONE,
@@ -205,29 +206,47 @@ Type *type_enum = &ENUM_TYPE;
 
 
 
-Sym **global_sym_list = NULL;
+static Sym **global_sym_list = NULL;
 // Stack for variable scoping
 enum { MAX_LOCAL_DEF = 1024 };
-Sym *local_sym_list[MAX_LOCAL_DEF];
-Sym **last_local_sym = local_sym_list;
+SymNode *local_sym_list[MAX_LOCAL_DEF];
+SymNode **last_local_sym = local_sym_list;
 bool is_local_scope = false;
-void sym_push(Sym *sym){
-     assert(sym != NULL );
+
+SymNode **sym_enter( void ){
+     /*
+      * Executes when we enter a new scope
+      */
+     SymNode **tmp = last_local_sym; 
      if ( last_local_sym == local_sym_list + MAX_LOCAL_DEF ){
-          fatal("Maximum linit of local variable declaraion reached!\n");
-          assert(0);
+          fatal("Max. no of scopes variables reached!");
      }
-     *last_local_sym++ = sym;
+     last_local_sym++;
+     return tmp;
+}
+Sym *sym_add_local(Sym *sym){
+     assert( last_local_sym - 1 >= local_sym_list );
+     SymNode **current = ( last_local_sym - 1 );
+     *current = addSymNode(*current, newSymNode(sym) );
+     return sym;
 }
 
-Sym **sym_enter(){
-     return last_local_sym;
+SymNode **sym_exit(SymNode **sym){
+     *(last_local_sym-1) = NULL;
+     last_local_sym--;
+     return sym;
 }
 
-Sym **sym_exit(Sym **ptr){
-     last_local_sym = ptr;
-     return ptr;
+bool in_local(const char *name){
+     for ( SymNode *it = *(last_local_sym - 1); it != NULL ;it = it->next){
+          if ( it->sym->name == name ){
+               return true;
+          }
+     }
+     return false;
 }
+
+
 Sym *sym_get(const char *);
 Sym *new_sym(SymKind kind, const char *name, Decl *decl){
      Sym *new = arena_alloc(&resolve_arena,sizeof(Sym));
@@ -302,10 +321,12 @@ Sym *sym_add_decl(Decl *decl){
 }
 Type *resolve_typespec(TypeSpec *);
 Sym *sym_get(const char *name){
-     for ( Sym **it = last_local_sym; it != local_sym_list ; it-- ){
-          Sym *sym = it[-1];
-          if ( sym->name == name ){
-               return sym;
+     for ( SymNode **it = last_local_sym; it >= local_sym_list; it-- ){
+          SymNode *current = *(it - 1);
+          for ( SymNode *it1 = current; it1 != NULL ; it1 = it1->next){
+               if ( it1->sym->name == name ){
+                    return it1->sym;
+               }
           }
      }
      for ( Sym **it = global_sym_list; it != buff_end(global_sym_list); it++ ){
@@ -325,7 +346,7 @@ Sym *resolve_name(const char *name){
      return new;
 }
 
-Sym **ordered_syms = NULL;
+static Sym **ordered_syms = NULL;
 ResolvedExpr resolved_null = {};
 ResolvedExpr resolve_expr(Expr *);
 ResolvedExpr resolve_expr_expected(Expr *,Type *);
@@ -397,7 +418,7 @@ void complete_type(Type *type){
      }
      duplicate_field_check(type);            
      if ( is_local_scope ){
-          sym_push(type->sym);
+          sym_add_local(type->sym);
      }  else {
           buff_push(ordered_syms,type->sym);
      }
@@ -458,6 +479,10 @@ void resolve_stmt_decl(Decl *decl){
      extern Type *resolve_var_decl(Decl *);
      extern Type *resolve_type_decl(Decl *);
      Type *type = NULL;
+     if ( in_local(decl->name) ){
+          fatal("Duplicate name in the same scope!\n");
+          assert(0);
+     }
      Sym *sym = new_sym(SYM_UNRESOLVED,decl->name,decl); 
      switch ( decl->kind ){
           case DECL_CONST:{
@@ -478,7 +503,7 @@ void resolve_stmt_decl(Decl *decl){
                type = type_enum;
                for ( size_t i = 0; i < decl->enum_decl.num_enum_items; i++ ){
                     tmp = new_sym(SYM_ENUM_CONST,decl->enum_decl.enum_items[i].name,decl);
-                    sym_push(tmp);
+                    sym_add_local(tmp);
                }
           }
           case DECL_STRUCT:
@@ -494,12 +519,12 @@ void resolve_stmt_decl(Decl *decl){
      sym->state = SYM_RESOLVED;
      sym->type = type;
      decl->sym = sym;
-     sym_push(sym);
+     sym_add_local(sym);
 }
 void resolve_cond_expr(Expr *cond_expr){
      ResolvedExpr new = resolve_expr(cond_expr);
-     if ( new.type != type_int ){
-          fatal("Value of conditional expression is not an integer type!\n");
+     if ( new.type != type_int  && new.type->kind != TYPE_PTR ){
+          fatal("Value of conditional expression is not an integer or a pointer type!\n");
      }
 }
 void resolve_stmt(Stmt *stmt, Type *ret_type){
@@ -508,16 +533,26 @@ void resolve_stmt(Stmt *stmt, Type *ret_type){
           case STMT_INIT:{
                ResolvedExpr new = resolve_expr(stmt->init_stmt.rhs);
                Sym *sym =sym_var(stmt->init_stmt.name,new.type); 
-               sym_push(sym);
+               sym_add_local(sym);
                stmt->init_stmt.sym = sym;
 			break;
           }
           case STMT_EXPR:
                resolve_expr(stmt->expr_stmt); 
 			break;
-          case STMT_FOR:
-               
+          case STMT_FOR:{
+               if ( stmt->for_stmt.stmt_init){
+                    resolve_stmt(stmt->for_stmt.stmt_init,ret_type);
+               }
+               if ( stmt->for_stmt.expr_cond ){
+                    resolve_cond_expr( stmt->for_stmt.expr_cond );
+               }
+               if ( stmt->for_stmt.stmt_update ){
+                    resolve_stmt(stmt->for_stmt.stmt_update , ret_type );
+               }
+               resolve_stmt_block(stmt->for_stmt.block,ret_type);
 			break;
+          }
           case STMT_WHILE:
           case STMT_DO_WHILE:
                resolve_cond_expr(stmt->while_stmt.expr_cond);
@@ -575,43 +610,29 @@ void resolve_stmt(Stmt *stmt, Type *ret_type){
 
 void resolve_stmt_block(StmtBlock block, Type *ret_type){
      is_local_scope = true;
-     Sym **syms = sym_enter();
+     SymNode **scope_start = sym_enter();
      for ( size_t i = 0; i < block.num_stmts; i++ ){
           resolve_stmt( block.stmts[i], ret_type );
      }
-     sym_exit(syms);
+     sym_exit(scope_start);
 }
 
 void resolve_func(Sym *sym ){
      is_local_scope = true;
-     Sym **syms = sym_enter();
+     SymNode **syms = sym_enter();
      Decl *decl = sym->decl;
      assert(sym->kind == SYM_FUNC );
      assert(sym->state = SYM_RESOLVED );
      Type *type = sym->type; 
-          /*struct {
-               Type **param_list;
-               Type *ret_type;
-               size_t num_params;
-          } func;
-typedef struct func_param {
-     const char *name;
-     TypeSpec *type;
-} func_param;
-
-typedef struct func_def{
-     BUF(func_param *param_list); // Buffer for storing function parameter list
-     size_t num_params;
-     TypeSpec *ret_type;  // return type of the function
-     StmtBlock block;
-} func_def;
-          */
      for ( size_t i = 0 ; i < type->func.num_params; i++ ){
           func_param tmp = decl->func_decl.param_list[i];
-          sym_push(sym_var(tmp.name,type->func.param_list[i]));     
+          sym_add_local(sym_var(tmp.name,type->func.param_list[i]));     
           assert( resolve_name(tmp.name)->type == type->func.param_list[i]);
      }
-     resolve_stmt_block(decl->func_decl.block, type->func.ret_type);
+     StmtBlock block = decl->func_decl.block;
+     for ( size_t i = 0; i < block.num_stmts; i++ ){
+          resolve_stmt( block.stmts[i], sym->type->func.ret_type );
+     }
      sym_exit(syms);
      is_local_scope = false;
 }
@@ -1274,19 +1295,19 @@ void resolve_test(void){
      sym_add_type(str_intern("float"),type_float);
      sym_add_type(str_intern( "char" ),type_char);
      sym_add_type(str_intern( "void" ),type_void);
-     char *list[] = {
+     /*char *list[] = {
           "var x : Vector = {1,2};",
           "struct Vector { x,y:int ; };",
-     };
-/*     char *list[] = { 
- //       "struct Vector { x, y: int; }",
+     };*/
+     char *list[] = { 
+//        "struct Vector { x, y: int; }",
  //       "var i: int",
 //        "func f1() { v := Vector{1, 2}; j := i; i++; j++; v.x = 2*j; }",
-        "func f2(n: int): int { struct S { x:int; y :int; }; var x : S = { 1, 2};return 2*n; }",
-      "var x:int**;",
-//        "func f3(x: int): int { if (x) { return -x; } else if (x % 2 == 0) { return 42; } else { return -1; } }",
+//        "func f2(n: int): int { struct S { x:int; y :int; }; var x : S = { 1, 2};return 2*n; }",
+//      "var x:int**;",
+ //       "func f3(x: int): int { if (x) { var x:int= 2; return -x; } else if (x % 2 == 0) { return 42; } else { var x:int= 2;return -1; } }",
 //        "func f4(n: int): int { for (i := 0; i < n; i++) { if (i % 3 == 0) { return n; } } return 0; }",
-        "func f5(x: int): int { switch(x) { case 0: case 1: return 42; case 3:default: return -1; } }",
+ //       "func f5(x: int): int { switch(x) { case 0: case 1: return 42; case 3:default: return -1; } }",
 //        "func f6(n: int): int { p := 1; while (n) { p *= 2; n--; } return p; }",
 //        "func f7(n: int): int { var p:int = 1;do { p *= 2; n--; } while (n); return p; }",
 //        "func add(v: Vector, w: Vector): Vector { return {v.x + w.x, v.y + w.y}; }",
@@ -1294,8 +1315,7 @@ void resolve_test(void){
   //        "const u = 2;",
  //         "func fact(x:int):int{var i:int = u ;product := 1; while(x!=1){product*=x;x = x - 1 ;} var e : int = i;return x;}",
           
-          taHHvar t:void = 32;",
-          "struct notVector { x :int ;};",
+          /*"struct notVector { x :int ;};",
           "func addV(x:Vector,y:Vector):Vector { return {p.x+q.x,p.y+q.y}; }",
           "var v : Vector = addV( {1,2,3},{1,2} );",
           "struct values { x:int; z : Vector;};",
@@ -1342,7 +1362,7 @@ void resolve_test(void){
 //          "typedef S = int[n+m];",
 //          "const m = sizeof(t.a);",
 //          "var i = n + m;",
-//          "var q = &i;"
+//          "var q = &i;"*/
      };
      Decl *tmp_decl;
      for( char **it = list; it != list + sizeof(list)/sizeof(char *); it++ ){
@@ -1363,4 +1383,6 @@ void resolve_test(void){
           printf("\nAlignment: %zu, Size: %zu\n", (*it)->type->alignment,(*it)->type->size); 
           printf("\n");
      }
-*/}
+     buff_free(global_sym_list);
+     buff_free(ordered_syms);
+}

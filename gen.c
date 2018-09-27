@@ -14,6 +14,8 @@ bool use_gen_buff = false;
 
 #define new_line printf("\n%.*s",indent,"\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t")
 extern int indent;
+extern Sym **global_sym_list ;
+extern Sym **ordered_syms ;
 char *bprintf( const char *fmt,... ){
      va_list args;
      va_start(args,fmt);
@@ -149,6 +151,7 @@ char *type_to_cdecl( Type *type , char *str ){
      }
 }
 #undef paren_str
+bool need_semi_colon = true;
 char *gen_code_var(Sym *sym){
      char *result = NULL;
      assert( sym->type );
@@ -156,6 +159,7 @@ char *gen_code_var(Sym *sym){
      if ( sym->decl->var_decl.expr ){
           result = bprintf("%s = %s",result,gen_expr(sym->decl->var_decl.expr));
      }
+     result = bprintf("%s%s",result,need_semi_colon?";":"");
      return result;
 }
 
@@ -196,6 +200,7 @@ char *gen_func_decl(Sym *sym){
      return type_to_cdecl(type->func.ret_type,result);
 }
 
+#define semi_colon(x) ( (x)?";":"" )
 void gen_stmt(Stmt *stmt){
      extern char *gen_stmt_block(StmtBlock);
      switch ( stmt->kind ){
@@ -205,11 +210,11 @@ void gen_stmt(Stmt *stmt){
                assert( sym->type );
                result = type_to_cdecl(sym->type,(char *)sym->name);
                assert( stmt->init_stmt.rhs);
-               printf("%s = %s;",result,gen_expr(stmt->init_stmt.rhs));
+               printf("%s = %s%s",result,gen_expr(stmt->init_stmt.rhs),semi_colon(need_semi_colon));
                break;
           }
           case STMT_EXPR:{
-               printf("%s;",gen_expr(stmt->expr_stmt));
+               printf("%s%s",gen_expr(stmt->expr_stmt),semi_colon(need_semi_colon));
                break;
           }
           case STMT_FOR:{
@@ -218,11 +223,14 @@ void gen_stmt(Stmt *stmt){
                     gen_stmt(stmt->for_stmt.stmt_init );
                } 
                if ( stmt->for_stmt.expr_cond ){
-                    printf(";%s;",gen_expr(stmt->for_stmt.expr_cond));
-               } 
+                    printf("%s;",gen_expr(stmt->for_stmt.expr_cond));
+               }
+               need_semi_colon = false; 
                if ( stmt->for_stmt.stmt_update ){
                     gen_stmt(stmt->for_stmt.stmt_update);
                }
+               need_semi_colon = true;
+               printf(")");
                gen_stmt_block(stmt->for_stmt.block);
                break;
           }
@@ -291,11 +299,13 @@ void gen_stmt(Stmt *stmt){
                gen_stmt_block(stmt->block);
                break;
           case STMT_DECL:
+               need_semi_colon = false;
                printf("%s;",gen_code_var(stmt->decl_stmt->sym));
+               need_semi_colon = true;
                break;
      }
 }
-
+#undef semi_colon
 char *gen_stmt_block(StmtBlock block){
      printf("{");
      indent++;
@@ -319,6 +329,22 @@ void gen_code_func(Sym *sym){
      char *result1 = gen_stmt_block(decl->func_decl.block); 
      printf("\n");
 }
+
+void gen_code_const(Sym *sym){
+     Decl *decl = sym->decl;
+     assert( decl->kind == DECL_CONST );
+     printf("enum {");
+     indent++;
+     new_line;
+     printf("%s",decl->name );
+     if ( decl->const_decl.expr ){
+          printf(" = %ld",sym->val);
+     }
+     indent--;
+     new_line;
+     printf("};");
+     new_line;
+}
 char *gen_code(Sym *sym){
      switch ( sym->kind ){
           case SYM_VAR:{
@@ -329,7 +355,7 @@ char *gen_code(Sym *sym){
                return gen_code_type(sym);
                break;
           case SYM_CONST:
-               return NULL;
+               gen_code_const(sym); 
                break;
           case SYM_FUNC:
                gen_code_func(sym);
@@ -343,7 +369,25 @@ void type_gen_test(void){
      char *c2 = type_to_cdecl( type_ptr(type_int), "y");
      char *c3 = type_to_cdecl( type_ptr(type_ptr(type_int)), "y");
 }
+
+DeclList *parse_decls(void){
+     Decl **tmp_decl_list = NULL;
+     while ( !is_token(TOKEN_EOF) ){
+          buff_push(tmp_decl_list,parse_decl());
+     }
+     size_t len = buff_len(tmp_decl_list);
+     Decl **decl_list = arena_dup(&gen_arena, tmp_decl_list, sizeof(tmp_decl_list)*len);
+     buff_free(tmp_decl_list);
+     DeclList *tmp = arena_alloc(&gen_arena,sizeof(DeclList) );
+     tmp->num_decls = len;
+     tmp->decl_list = decl_list;
+     return tmp;
+}
 void gen_test(void){
+     sym_add_type(str_intern("int"),type_int);
+     sym_add_type(str_intern("float"),type_float);
+     sym_add_type(str_intern( "char" ),type_char);
+     sym_add_type(str_intern( "void" ),type_void);
      type_gen_test();
      use_gen_buff = true;
      indent = 0;
@@ -379,17 +423,54 @@ void gen_test(void){
 //          "var r : someArray [10];" ,
 //          "var s : int = r[2].x[2];",
 //          "func foo2(x:int,y:int):{ i := 2; i = 3;};"
-          "func foo3(x:int,y:int){ i:=2; while ( i < 2 ){ i = i + 1; }}" ,
+/*          "func foo3(x:int,y:int){ i:=2; while ( i < 2 ){ i = i + 1; }}" ,
           "func foo4(x:int,y:int*){ i:=2; if ( i == 2 ){ while ( i < 2 ){i = i + 1;}} else if ( i == 3 ){i = 2;} else {i = 3;} }" ,
      
-          "func foo5(x:int){ var x: int = 3; switch( x ){ case 1,2,3: x= x+1;break; default: x = 2;}}",
+          "func foo5(x:int){ switch( x ){ case 1,2,3: x= x+1;break; default: x = 2;}}",*/
+ //         "const x = 2;",
+ //         "func factorial(x:int):int{ if  (x == 1){return 1;}else{ return x * factorial(x-1);} }",
+//          "func main(x:int):int{ var e:int = 6; var y = factorial(e); return y; }",
+  
+  
+#if 1 
+      "union IntOrPtr { i: int; p: int*; };"
+        "func f() {\n"
+        "    u1 := IntOrPtr{i = 42};\n"
+        "    u2 := IntOrPtr{p = cast(int*)u1.i};\n"
+//        "    u1.i = 0;\n"
+        //"var x : int = sizeof(:example);"
+       //   "struct example { t : int; };"
+//        "    u2.p = cast(int*)0;\n"
+        "}\n"
+        "var i: int;\n"
+        "struct Vector { x: int; y: int; };\n"
+#endif
+//        "func fact_rec(n: int): int { r := 1; for (i := 2; i <= n; i++) { r *= i; }r++; return r; }\n",
+ //       "func example_test(): int { return fact_rec(10); }\n",
+#if 0
+        "func f1() { v := Vector{1, 2}; j := i; i++; j++; v.x = 2*j; }\n",
+        "func f2(n: int): int { return 2*n; }\n",
+        "func f3(x: int): int { if (x) { return -x; } else if (x % 2 == 0) { return 42; } else { return -1; } }\n",
+        "func f4(n: int): int { for (i := 0; i < n; i++) { if (i % 3 == 0) { return n; } } return 0; }\n",
+        "func f5(x: int): int { switch(x) { case 0: case 1: return 42; case 3: default: return -1; } }\n",
+        "func f6(n: int): int { p := 1; while (n) { p *= 2; n--; } return p; }\n",
+        "func f7(n: int): int { p := 1; do { p *= 2; n--; } while (n); return p; }\n",
+#endif
+        "const z = 1+sizeof(p);\n"
+        "var p: T;\n"
+        "struct T { a: int[3]; };\n"
      };
      Decl *tmp_decl;
-     for( char **it = list; it != list + sizeof(list)/sizeof(char *); it++ ){
+     init_stream(*list);
+     DeclList *decls = parse_decls();
+     for ( size_t i = 0 ; i < decls->num_decls ; i++ ){
+          sym_add_decl( decls->decl_list[i]);
+     }
+     /*for( char **it = list; it != list + sizeof(list)/sizeof(char *); it++ ){
           init_stream(*it);
           tmp_decl = parse_decl();
           sym_add_decl(tmp_decl);
-     }
+     }*/
     for ( Sym **it = global_sym_list; it != buff_end(global_sym_list); it++ ){
           resolve_sym(*it);
           if ( (*it)->kind == SYM_FUNC ){

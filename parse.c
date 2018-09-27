@@ -350,7 +350,7 @@ Decl *parse_const(){
 //     next_token();
      expect_token(TOKEN_ASSIGN);
      Expr *expr = parse_expr();
-     
+     expect_token(TOKEN_SEMICOLON);
      return decl_const(name,expr);
 }
 
@@ -364,6 +364,7 @@ Decl *parse_var(){
      if ( match_token(TOKEN_ASSIGN) ){
           expr = parse_expr();
      }
+     expect_token(TOKEN_SEMICOLON);
      return decl_var(name,type,expr);     
 }
 
@@ -389,6 +390,8 @@ Decl *parse_agg(StmtKind kind){
           buff_push(list,parse_aggregate_item());
           expect_token(TOKEN_SEMICOLON);
      }
+     expect_token(TOKEN_SEMICOLON);
+     match_token(TOKEN_SEMICOLON);
      new_agg = decl_aggregate(kind,name,buff_len(list),list);
      return new_agg;
 }
@@ -648,7 +651,7 @@ Stmt *parse_stmt(){
           return stmt_continue();
      } else if ( is_decl_keyword() ){
           Decl *decl = parse_decl();
-          expect_token(TOKEN_SEMICOLON);
+          //expect_token(TOKEN_SEMICOLON);
           return stmt_decl(decl);
      } else {
           // parse expr

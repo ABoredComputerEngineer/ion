@@ -320,3 +320,9 @@ struct Stmt{
 
 };
 
+
+typedef struct DeclList {
+     Decl **decl_list;
+     size_t num_decls;
+} DeclList;
+

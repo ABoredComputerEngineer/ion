@@ -18,7 +18,6 @@
 #include "parse.c"
 #include "resolve.c"
 #include "gen.c"
-//#include "new_gen.c"
 
 void run_tests(void){
 //     buff_test();
@@ -30,7 +29,7 @@ void run_tests(void){
 //     type_test(); 
      resolve_test();
 //     order_test();
-    gen_test();
+     gen_test();
      flush_buff(stdout,print_buffer);
 }
 
