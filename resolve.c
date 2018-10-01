@@ -639,14 +639,6 @@ void resolve_func(Sym *sym ){
 
 Type *resolve_func_decl(Decl *decl){
      assert(decl->kind == DECL_FUNC);
-     /*
-          struct {
-               Type **param_list;
-               Type *ret_type;
-               size_t num_params;
-          } func;
-          */
- //    Type *type_func(Type **param_list,size_t num_params, Type *ret_type){
      Type **param_list = NULL;
      Type *tmp = NULL;     
      for ( size_t i = 0; i < decl->func_decl.num_params; i++ ){
@@ -979,12 +971,6 @@ ResolvedExpr resolve_expr_binary(Expr *expr){
 }
 
 ResolvedExpr resolve_expr_compound(Expr *expr, Type *expected_type){
-    /* 
-     TypeSpec *type;
-     size_t num_args;
-     BUF(Expr **args); // Buffer
-     */
-   //  assert(expr->compound_expr.type);
      Type *comp_type = NULL;
      if ( !expected_type && !expr->compound_expr.type ){
           fatal("Compound Expr with no designated type!\n");
@@ -1158,7 +1144,7 @@ ResolvedExpr resolve_expr_cast(Expr *expr){
      Type *cast_type = resolve_typespec(expr->cast_expr.cast_type);
      complete_type(cast_type);
      if ( cast_type->kind == TYPE_PTR ){
-          if ( !new.is_lvalue || (new.type->kind != TYPE_PTR && new.type->kind != TYPE_INT) ){
+          if ( new.type->kind != TYPE_PTR && new.type->kind != TYPE_INT ){
                fatal("Invalid expression to cast to pointer type.\n");
           }
      } else if ( cast_type->kind == TYPE_INT ){

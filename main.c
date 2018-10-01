@@ -18,6 +18,8 @@
 #include "parse.c"
 #include "resolve.c"
 #include "gen.c"
+#include "ion.c"
+
 
 void run_tests(void){
 //     buff_test();
@@ -27,13 +29,16 @@ void run_tests(void){
 //     ast_test();
 //     parse_test();
 //     type_test(); 
-     resolve_test();
+//     resolve_test();
 //     order_test();
-     gen_test();
+//     gen_test();
+//     file_test();
+//     ion_test();
      flush_buff(stdout,print_buffer);
 }
 
 int main(int argc, char **argv){
-     run_tests();
+//     run_tests();
+     ion_main(argc,argv); 
      return 0;
 }

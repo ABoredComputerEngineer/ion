@@ -256,3 +256,82 @@ void str_intern_test(void){
      assert( px != pz );
 }
 
+/* File Handling */
+
+
+const char *rev_str_search( const char *stream, const char *key_str ){
+     size_t stream_len = strlen(stream);
+     size_t key_len = strlen(key_str);
+     for ( const char *str = stream+stream_len-1; str != stream; str-- ){
+          const char *key = key_str+key_len - 1;
+          for ( const char *tmp = str; \
+                    key != key_str && *tmp == *key;\
+                    tmp--,key--);
+          if ( key == key_str ){
+               return str - key_len + 1;
+          }
+     }
+     return NULL;
+
+}
+
+void check_error(FILE *fp,const char *func_name){
+     if ( ferror(fp) ){
+          perror(func_name);
+          exit(EXIT_FAILURE);
+     }
+}
+
+const char *open_ion_file(const char *path){
+     FILE *fp = fopen(path, "rb");
+     if ( fp == NULL ){
+          perror( " fopen() ");
+          exit(EXIT_FAILURE);
+     }
+     const char *extension = rev_str_search(path,".ion");
+     if ( extension == NULL ){
+          fatal("Invalid file type!\n");
+     } 
+     if ( fseek( fp, 0, SEEK_END ) != 0 ){
+          check_error(fp,"fseek()");
+     }
+     size_t size = ftell(fp);
+     if ( fseek( fp, 0, SEEK_SET) != 0 ){
+          check_error(fp,"fseek()");
+     }
+     char *buffer = xcalloc(size, sizeof(char));
+     size_t error = fread(buffer,sizeof(char),size,fp);
+     if ( error && error != size ){
+          fatal("Corrupted file!\n");
+          exit(EXIT_FAILURE);
+     }
+     fclose(fp);
+     return buffer;
+
+}
+
+void *export_to_c(const char *path,const char *out, size_t len){
+     const char *extension = rev_str_search(path,".ion");
+     size_t path_size = (size_t)(extension - path);
+     size_t final_size = path_size + 2 *sizeof(char) + 2;
+     char *out_path = xcalloc(final_size,sizeof(char));
+     snprintf(out_path,final_size,"%.*s.c",(int)path_size,path);
+     FILE *fp  = fopen(out_path,"w");
+     if ( fp == NULL ){
+          perror( " fopen() ");
+          exit(EXIT_FAILURE);
+     }
+     if ( fwrite(out,sizeof(const char), len,fp )  == 0 ){
+          perror("fwrite()");
+          fatal("Error writing to file!\n");
+     }
+
+     fclose(fp);
+}
+
+void file_test(void){
+     const char *stream = open_ion_file("./new.ion");
+     const char *tmp = "fuck this shit";
+     export_to_c("./new.ion",tmp,strlen(tmp)*sizeof(char));
+     printf("%s\n",stream);
+}

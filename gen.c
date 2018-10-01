@@ -33,84 +33,108 @@ char *bprintf( const char *fmt,... ){
 
 
 
-char *gen_expr(Expr *expr){
+void gen_expr(Expr *expr){
      extern char *type_to_cdecl(Type *,char *);
      switch (expr->kind){
           case EXPR_NAME:
-               return bprintf("%s",expr->name);
+               printf("%s",expr->name);
                break;
           case EXPR_INT:
-               return bprintf("%d",expr->int_val);
+               printf("%lu",expr->int_val);
                break;
           case EXPR_FLOAT:
-               return bprintf("%f",expr->float_val);
+               printf("%f",expr->float_val);
                break;
           case EXPR_UNARY:
-               return bprintf("%s(%s)",operations[expr->unary_expr.op],gen_expr(expr->unary_expr.operand));
+               printf("%s(",operations[expr->unary_expr.op]);
+               gen_expr(expr->unary_expr.operand);
+               printf(")");
                break;
           case EXPR_BINARY:
-               return bprintf("(%s)%s(%s)",gen_expr(expr->binary_expr.left),operations[expr->binary_expr.op],gen_expr(expr->binary_expr.right));
+               printf("(");
+               gen_expr(expr->binary_expr.left);
+               printf(")%s",operations[expr->binary_expr.op]);
+               printf("(");
+               gen_expr(expr->binary_expr.right);
+               printf(")");
                break;
           case EXPR_STR:
-               return bprintf("\"%s\"",expr->str_val);
+               printf("\"%s\"",expr->str_val);
+               break;
           case EXPR_CAST:
-               return bprintf("(%s)(%s)",type_to_cdecl(expr->cast_expr.resolved_type,""),gen_expr(expr->cast_expr.expr));
+               printf("(%s)",type_to_cdecl(expr->cast_expr.resolved_type,""));
+               printf("(");
+               gen_expr(expr->cast_expr.expr);
+               printf(")");
+               break;
           case EXPR_CALL: {
                char *result = NULL;
-               result  = bprintf("%s(",gen_expr(expr->func_call_expr.operand));
+               gen_expr(expr->func_call_expr.operand);
+               printf("(");
                for ( size_t i = 0; i < expr->func_call_expr.num_args ; i++ ){
-                    result = bprintf("%s%s%s",result,i==0?"":",",gen_expr(expr->func_call_expr.args[i]));
+                    gen_expr(expr->func_call_expr.args[i]);
+                    printf("%s",i==0?"":",");
                }
-               result = bprintf("%s)",result);
-               return result;
+               printf(")");
                break;
           }
           case EXPR_INDEX:
-               return bprintf("%s[%s]",gen_expr(expr->array_expr.operand),gen_expr(expr->array_expr.index));
+               gen_expr(expr->array_expr.operand);
+               printf("[");
+               gen_expr(expr->array_expr.index);
+               printf("]");
+               break;
           case EXPR_FIELD:
-               return bprintf("(%s).%s",gen_expr(expr->field_expr.operand),expr->field_expr.field_name);
+               printf("(");
+               gen_expr(expr->field_expr.operand);
+               printf(").%s",expr->field_expr.field_name);
+               break;
           case EXPR_TERNARY:
-               return bprintf("(%s)?(%s):(%s)",gen_expr(expr->ternary_expr.cond_expr)\
-                         ,gen_expr(expr->ternary_expr.then_expr)\
-                         ,gen_expr(expr->ternary_expr.else_expr));
+               printf("(");
+               gen_expr(expr->ternary_expr.cond_expr);
+               printf(")(");
+               gen_expr(expr->ternary_expr.then_expr);
+               printf(")(");
+               gen_expr(expr->ternary_expr.else_expr);
+               printf(")");
+               break;
           case EXPR_COMPOUND:{
                char *result = NULL;
                if ( expr->compound_expr.resolved_type->kind  != TYPE_ARRAY ){
-                    result =  bprintf("(%s){",type_to_cdecl(expr->compound_expr.resolved_type,""));
+                    printf("(%s){",type_to_cdecl(expr->compound_expr.resolved_type,""));
                } else {
-                    result =  bprintf("{",type_to_cdecl(expr->compound_expr.resolved_type,""));
+                    printf("{%s",type_to_cdecl(expr->compound_expr.resolved_type,""));
                }
                for ( CompoundField *it = expr->compound_expr.fields;\
                          it != expr->compound_expr.fields + expr->compound_expr.num_args;\
                          it++ ){
+                    printf("%s",it==expr->compound_expr.fields?"":",");
                     if ( it->kind == FIELD_NONE ){
-                         result = bprintf("%s%s%s",result,\
-                                   (it == expr->compound_expr.fields)?"":",",\
-                                   it->expr);
+                         gen_expr(it->expr);
                     } else if ( it->kind == FIELD_INDEX ){
-                         result = bprintf("%s%s[%s]=%s",result,\
-                                  (it == expr->compound_expr.fields)?"":",",\
-                                 gen_expr(it->field_expr),\
-                                 gen_expr(it->expr)); 
+                         printf("[");
+                         gen_expr(it->field_expr);
+                         printf("]=");
+                         gen_expr(it->expr);
                     } else{
                          assert(it->kind == FIELD_NAME);
-                         result = bprintf("%s%s.%s=%s",result,\
-                                  (it == expr->compound_expr.fields)?"":",",\
-                                 gen_expr(it->field_expr),\
-                                 gen_expr(it->expr)); 
+                         gen_expr(it->field_expr);
+                         printf(".");
+                         gen_expr(it->expr);
                     }
                }
-               result = bprintf("%s}",result);
-               return result;
+               printf("}");
+               break;
           }
           case EXPR_SIZEOF_TYPE:
-               return bprintf("sizeof(%s)",type_to_cdecl(expr->sizeof_type.resolved_type,""));
+               printf("sizeof(%s)",type_to_cdecl(expr->sizeof_type.resolved_type,""));
                break;
           case EXPR_SIZEOF_EXPR:
-               return bprintf("sizeof(%s)",gen_expr(expr->sizeof_expr));
+               printf("sizeof(");
+               gen_expr(expr->sizeof_expr);
+               printf(")");
                break;
      }
-     return NULL;
 
 }
 
@@ -121,7 +145,7 @@ char *type_to_cdecl( Type *type , char *str ){
           case TYPE_INT:
                return bprintf("int%s%s",str?" ":"",str); 
           case TYPE_FLOAT:
-               return bprintf("float%s%s\n",str?" ":"",str); 
+               return bprintf("float%s%s",str?" ":"",str); 
           case TYPE_CHAR:
                return bprintf("char%s%s",str?" ":"",str); 
           case TYPE_VOID:
@@ -155,12 +179,12 @@ bool need_semi_colon = true;
 char *gen_code_var(Sym *sym){
      char *result = NULL;
      assert( sym->type );
-     result = type_to_cdecl(sym->type,(char *)sym->name);
+     printf("%s",type_to_cdecl(sym->type,(char *)sym->name));
      if ( sym->decl->var_decl.expr ){
-          result = bprintf("%s = %s",result,gen_expr(sym->decl->var_decl.expr));
+          printf("=");
+          gen_expr(sym->decl->var_decl.expr);
      }
-     result = bprintf("%s%s",result,need_semi_colon?";":"");
-     return result;
+     printf("%s",need_semi_colon?";":"");
 }
 
 char *gen_code_type(Sym *sym){
@@ -178,7 +202,7 @@ char *gen_code_type(Sym *sym){
           result = bprintf("%s};",result);
           return result;
      } else if ( decl->kind == DECL_TYPEDEF){
-          return bprintf("typedef %s %s",type_to_cdecl(type,""),decl->name); 
+          return bprintf("typedef %s %s;",type_to_cdecl(type,""),decl->name); 
      }
      return NULL;
 }
@@ -208,13 +232,16 @@ void gen_stmt(Stmt *stmt){
                Sym *sym = stmt->init_stmt.sym;
                char *result = NULL;
                assert( sym->type );
-               result = type_to_cdecl(sym->type,(char *)sym->name);
+               printf("%s",type_to_cdecl(sym->type,(char *)sym->name));
                assert( stmt->init_stmt.rhs);
-               printf("%s = %s%s",result,gen_expr(stmt->init_stmt.rhs),semi_colon(need_semi_colon));
+               printf("=");
+               gen_expr(stmt->init_stmt.rhs);
+               printf("%s",semi_colon(need_semi_colon));
                break;
           }
           case STMT_EXPR:{
-               printf("%s%s",gen_expr(stmt->expr_stmt),semi_colon(need_semi_colon));
+               gen_expr(stmt->expr_stmt);
+               printf("%s",semi_colon(need_semi_colon));
                break;
           }
           case STMT_FOR:{
@@ -223,7 +250,8 @@ void gen_stmt(Stmt *stmt){
                     gen_stmt(stmt->for_stmt.stmt_init );
                } 
                if ( stmt->for_stmt.expr_cond ){
-                    printf("%s;",gen_expr(stmt->for_stmt.expr_cond));
+                    gen_expr(stmt->for_stmt.expr_cond);
+                    printf(";");
                }
                need_semi_colon = false; 
                if ( stmt->for_stmt.stmt_update ){
@@ -235,21 +263,29 @@ void gen_stmt(Stmt *stmt){
                break;
           }
           case STMT_WHILE:
-               printf("while ( %s )",gen_expr(stmt->while_stmt.expr_cond));
+               printf("while ( ");
+               gen_expr(stmt->while_stmt.expr_cond);
+               printf(")");
                gen_stmt_block(stmt->while_stmt.block);
                break;
           case STMT_DO_WHILE:
                printf("do ");
                gen_stmt_block(stmt->while_stmt.block);
-               printf("(%s);",gen_expr(stmt->while_stmt.expr_cond));
+               printf("while (");
+               gen_expr(stmt->while_stmt.expr_cond);
+               printf(");");
                break;
           case STMT_IF:{
-               printf("if ( %s )",gen_expr(stmt->if_stmt.cond));
+               printf("if ( ");
+               gen_expr(stmt->if_stmt.cond);
+               printf(")");
                gen_stmt_block(stmt->if_stmt.if_block);
                for ( Elseif *it = stmt->if_stmt.elseifs;\
                          it != stmt->if_stmt.elseifs + stmt->if_stmt.num_elseifs;\
                          it++){
-                    printf(" else if ( %s ) ",gen_expr(it->cond) );
+                    printf(" else if ( ");
+                    gen_expr(it->cond);
+                    printf(")");
                     gen_stmt_block(it->elseif_block);
                }
                if ( stmt->if_stmt.else_block.num_stmts != 0 ){
@@ -259,7 +295,9 @@ void gen_stmt(Stmt *stmt){
                break;
           }
           case STMT_SWITCH:{
-               printf("switch ( %s ){",gen_expr(stmt->switch_stmt.expr));
+               printf("switch ( ");
+               gen_expr(stmt->switch_stmt.expr);
+               printf("){");
                indent++;
                new_line;
                for ( size_t i = 0; i < stmt->switch_stmt.num_cases; i++ ){
@@ -272,7 +310,9 @@ void gen_stmt(Stmt *stmt){
                          for ( Expr **it1 = it.expr_list;\
                                    it1 != it.expr_list + it.num_expr;\
                                    it1++){
-                              printf("case %s:",gen_expr(*it1));
+                              printf("case ");
+                              gen_expr(*it1);
+                              printf(":");
                          }
                          if ( it.case_block.num_stmts != 0 ){
                               gen_stmt_block(it.case_block);
@@ -287,7 +327,9 @@ void gen_stmt(Stmt *stmt){
                break;
           }
           case STMT_RETURN:
-               printf("return %s;",gen_expr(stmt->return_stmt.return_expr));
+               printf("return ");
+               gen_expr(stmt->return_stmt.return_expr);
+               printf(";");
                break;
           case STMT_BREAK:
                printf("break;");
@@ -299,9 +341,8 @@ void gen_stmt(Stmt *stmt){
                gen_stmt_block(stmt->block);
                break;
           case STMT_DECL:
-               need_semi_colon = false;
-               printf("%s;",gen_code_var(stmt->decl_stmt->sym));
                need_semi_colon = true;
+               gen_code_var(stmt->decl_stmt->sym);
                break;
      }
 }
@@ -348,7 +389,8 @@ void gen_code_const(Sym *sym){
 char *gen_code(Sym *sym){
      switch ( sym->kind ){
           case SYM_VAR:{
-               return gen_code_var(sym);
+               gen_code_var(sym);
+               printf("\n");
                break;
           }
           case SYM_TYPE:
@@ -393,35 +435,6 @@ void gen_test(void){
      indent = 0;
      FILE *fp = fopen("out.c","w");
      char *list[] = {
-//          "func foo(x:int,y:int):Vector{return {x,y};};",
-//          "func foo1(x:int,y:int):Vector*{return &x;};",
-//          "struct someArray { x:int[10];y:int;};",
-//          "enum enumeration { X,Y,Z };",
-//          "union IntorPtr { x :int; y : int *;};",
-//          "var x : int = d",
-//          "var y : int *",
-//          "var z : int[10]",
-//          "var a : (func (char*, char [10]):char);",
-//          "var b : (func ():void)[10];",
-//          "var c : Vector[10] ;",
-//          "var d : int;",
-//          "struct Vector {x:int;y:int;};",
-//          "var e : newInt = 2",
-//          "typedef newInt = int;",
-//          "var f :int = 1+2*(3+2)",
-//          "var g : int  = cast(int)2;",
-//          "var h : Vector = foo(1,2);" ,
-//          "var i =  &z[2];",
-//          "var j = c[2].x;",
-//          "var k = foo(1,2).x;",
-//          "var l = (e == 2 )?3:4;",
-//          "var m : Vector = { y = 1, x = 2 };",
-//          "var n : int[10] = { [2] = 3, [3] = 4, [ 0] = 1};",
-//          "var o : int[10] = { [3] = 4, [ 0] = 1};",
-//          "var p : int = sizeof(:Vector)",
-//          "var q  = sizeof(1+2);",
-//          "var r : someArray [10];" ,
-//          "var s : int = r[2].x[2];",
 //          "func foo2(x:int,y:int):{ i := 2; i = 3;};"
 /*          "func foo3(x:int,y:int){ i:=2; while ( i < 2 ){ i = i + 1; }}" ,
           "func foo4(x:int,y:int*){ i:=2; if ( i == 2 ){ while ( i < 2 ){i = i + 1;}} else if ( i == 3 ){i = 2;} else {i = 3;} }" ,
@@ -431,8 +444,10 @@ void gen_test(void){
  //         "func factorial(x:int):int{ if  (x == 1){return 1;}else{ return x * factorial(x-1);} }",
 //          "func main(x:int):int{ var e:int = 6; var y = factorial(e); return y; }",
   
-  
-#if 1 
+     "var x : int = a;"
+         "var a:int = z;"
+    "var z : int = 2;" 
+#if 0 
       "union IntOrPtr { i: int; p: int*; };"
         "func f() {\n"
         "    u1 := IntOrPtr{i = 42};\n"
@@ -456,34 +471,8 @@ void gen_test(void){
         "func f6(n: int): int { p := 1; while (n) { p *= 2; n--; } return p; }\n",
         "func f7(n: int): int { p := 1; do { p *= 2; n--; } while (n); return p; }\n",
 #endif
-        "const z = 1+sizeof(p);\n"
-        "var p: T;\n"
-        "struct T { a: int[3]; };\n"
+//        "const z = 1+sizeof(p);\n"
+//        "var p: T;\n"
+//        "struct T { a: int[3]; };\n"
      };
-     Decl *tmp_decl;
-     init_stream(*list);
-     DeclList *decls = parse_decls();
-     for ( size_t i = 0 ; i < decls->num_decls ; i++ ){
-          sym_add_decl( decls->decl_list[i]);
-     }
-     /*for( char **it = list; it != list + sizeof(list)/sizeof(char *); it++ ){
-          init_stream(*it);
-          tmp_decl = parse_decl();
-          sym_add_decl(tmp_decl);
-     }*/
-    for ( Sym **it = global_sym_list; it != buff_end(global_sym_list); it++ ){
-          resolve_sym(*it);
-          if ( (*it)->kind == SYM_FUNC ){
-               resolve_func(*it);
-          }
-          complete_type((*it)->type);
-     }
-     char *tmp = NULL;
-    for( Sym **it = ordered_syms; it != buff_end(ordered_syms); it++ ){
-//          print_decl( (*it)->decl );
-          tmp = gen_code(*it);
-          if ( tmp )
-               printf("%s\n",tmp);          
-    }
-     flush_buff(fp,gen_buff);
 }

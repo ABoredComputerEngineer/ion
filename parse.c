@@ -339,6 +339,7 @@ Decl *parse_typedef(){
      expect_token(TOKEN_ASSIGN);
      TypeSpec *type;
      type = parse_type();
+     expect_token(TOKEN_SEMICOLON);
      return decl_typedef(name,type);
      
 }
@@ -425,6 +426,7 @@ Decl *parse_enum(){
           buff_push(enum_item_list,parse_enum_item());
           match_token(TOKEN_COMMA);
      }
+     expect_token(TOKEN_SEMICOLON);
      new_enum->enum_decl.enum_items = ast_dup(enum_item_list,buff_sizeof(enum_item_list));
 //     new_enum->enum_decl.enum_items = enum_item_list;
  //    new_enum->enum_decl.num_enum_items = buff_len(enum_item_list);
