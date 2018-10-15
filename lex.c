@@ -74,6 +74,8 @@ typedef struct Token {
      TokenMod mod;
      char *start;
      char *end;
+     size_t line_number;
+     char *line_start;
      union {
           uint64_t int_val;
           double float_val;
@@ -380,8 +382,12 @@ top:
      token.start = stream;
      switch ( *stream ){
           case ' ': case '\n': case '\r': case '\t': 
-               while ( isspace(*stream) )
-                    stream++;
+               while ( isspace(*stream) ){
+                    if ( *stream == '\n' ){
+                         token.line_number++;
+                    }
+                    token.line_start = ++stream;
+               }
                goto top;
                break;
           case '.':

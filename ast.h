@@ -137,6 +137,7 @@ struct Decl{
      DeclKind kind;
      Sym *sym;
      const char *name;
+     size_t line;
      union {
           enum_def enum_decl;
           aggregate_def aggregate_decl;
