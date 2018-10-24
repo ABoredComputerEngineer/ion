@@ -23,9 +23,9 @@
 #include "ion.c"
 
 void run_tests(void){
-     map_test();
-//     buff_test();
 //     str_intern_test();
+//     map_test();
+//     buff_test();
 //     lex_test();
 //     arena_test();
 //     ast_test();
@@ -40,7 +40,7 @@ void run_tests(void){
 }
 
 int main(int argc, char **argv){
-     run_tests();
-//     ion_main(argc,argv); 
+//     run_tests();
+     ion_main(argc,argv); 
      return 0;
 }

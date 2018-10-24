@@ -143,13 +143,13 @@ char *type_to_cdecl( Type *type , char *str ){
      
      switch ( type->kind ){
           case TYPE_INT:
-               return bprintf("int%s%s",str?" ":"",str); 
+               return bprintf("int%s%s",str?" ":"",str?str:""); 
           case TYPE_FLOAT:
-               return bprintf("float%s%s",str?" ":"",str); 
+               return bprintf("float%s%s",str?" ":"",str?str:""); 
           case TYPE_CHAR:
-               return bprintf("char%s%s",str?" ":"",str); 
+               return bprintf("char%s%s",str?" ":"",str?str:""); 
           case TYPE_VOID:
-               return bprintf("void%s%s",str?" ":"",str); 
+               return bprintf("void%s%s",str?" ":"",str?str:""); 
           case TYPE_PTR:
                return type_to_cdecl(type->ptr.base_type, bprintf(paren_str(str,*%s),str) );
           case TYPE_ARRAY:
@@ -424,6 +424,34 @@ DeclList *parse_decls(void){
      tmp->num_decls = len;
      tmp->decl_list = decl_list;
      return tmp;
+}
+
+void gen_forward_decls( void ){
+     for( Sym **it = ordered_syms; it != buff_end(ordered_syms); it++ ){
+          if ( (*it)->kind == SYM_TYPE ){
+               Type *t= (*it)->type;
+               if ( t != type_int && t!= type_float && t != type_void ){
+                    if ( t->kind == TYPE_STRUCT ){
+                         printf("typedef struct %s %s;\n",(*it)->name,(*it)->name);
+                    } else if ( t->kind == TYPE_UNION ){
+                         printf("typedef union %s %s;\n",(*it)->name,(*it)->name);
+                    }
+               }
+          } else if ( (*it)->kind == SYM_FUNC ){
+               Type *type = (*it)->type;
+               printf("%s",type_to_cdecl(type->func.ret_type,NULL));
+               printf(" %s(",(*it)->name );
+               for ( size_t i = 0;\
+                    i < type->func.num_params;\
+                    i++ ){
+                    printf("%s%s",\
+                              ( i==0 )?"":",",\
+                              type_to_cdecl(type->func.param_list[i],NULL));
+
+               }
+               printf(");\n");           
+          }
+     }
 }
 void gen_test(void){
      sym_add_type(str_intern("int"),type_int);

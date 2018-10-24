@@ -292,7 +292,7 @@ uint64_t int_hash( uint64_t x ){
      return x;
 }
 
-uint64_t str_hash( char *str, size_t len ){
+uint64_t str_hash( const char *str, size_t len ){
      //FNV hashing 
      uint64_t fnv_prime = 0x100000001b3ull;
      uint64_t fnv_offset = 0xcbf29ce484222325ull;
@@ -354,7 +354,6 @@ void map_put_hash( Map *map, void *key, void *value, uint64_t hash ){
 }
 
 void *map_get_hash( Map *map, void *key , uint64_t hash ){
-     assert( map->cap );
      if ( map->cap == 0 ){
           return NULL;
      }
@@ -389,10 +388,10 @@ void map_test( void ){
      void *x = map_get( &m1, (void *)42 );
      assert( x == (void *)1 );
      enum { N = 1024 };
-     for ( int i = 1; i < 1024; i++ ){
+     for ( size_t i = 1; i < 1024; i++ ){
           map_put( &m1, (void *)i, (void *)(i+1) );
      }
-     for ( int i = 1; i < 1024; i++ ){
+     for ( size_t i = 1; i < 1024; i++ ){
           void *x = map_get( &m1, ( void *)i );
           assert( x == (void *)(i+1) );
      }
@@ -404,29 +403,29 @@ void map_test( void ){
 const char *str_intern(const char *);
 const char *str_intern_range( const char *start, const char *end);
 Arena arena_intern;
-typedef struct Intern {
+typedef struct intern {
      size_t len;
-     const char *str;
-} Intern;
+     struct intern *next;
+     char str[];
+} intern;
 
-
-static Intern *intern;
-
+Map intern_map = {0};
 const char *str_intern_range( const char *start, const char *end){
      size_t len = end - start;
-     for ( Intern *ip = intern; ip != buff_end(intern) ; ip++ ){
-          if ( ip->len == len && ( strncmp(ip->str,start,len) == 0 ) )
-               return ip->str;
+     uint64_t hash = str_hash( start, len );
+     intern *get = map_get_hash( &intern_map, (void *)hash, hash );
+     for ( intern *it = get; it != NULL; it = it->next ){
+          if ( ( it->len == len ) && ( strncmp(it->str,start,len) == 0 ) ){
+               return it->str;
+          }
      }
-
-     char *string = arena_alloc(&arena_intern,len+1);
-     memcpy(string,start,len);
-     string[len] = 0;
-     Intern newIntern = {len,string};
-
-     buff_push(intern,newIntern );
-     return string;
-
+     intern *new= arena_alloc( &arena_intern, offsetof( intern,str ) + len*sizeof(char) + 1 );
+     memcpy(new->str,start,len);
+     new->len = len;
+     new->str[len] = 0;
+     map_put_hash( &intern_map, (void *)hash, new, hash );
+     new->next = get;
+     return new->str;
      
 }
 
@@ -439,6 +438,9 @@ void str_intern_test(void){
      char y[] = "hello";
      char z[] = "hellozz";
      assert(x!=y);
+     char x2[] = "costarring";
+     char y2[]  = "liquid";
+//     assert( str_hash(x2,strlen(x2)) == str_hash(y2,strlen(y2)) );
      const char *px = str_intern(x);
      const char *py = str_intern(y);
      const char *pz = str_intern(z);

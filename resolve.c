@@ -101,25 +101,18 @@ Type *type_alloc(TypeKind kind){
 }
 
 
-typedef struct CachePtrType {
-     Type *ptr;
-     Type *base_type;
-}CachePtrType;
-CachePtrType *ptr_list = NULL;
-
+//CachePtrType *ptr_list = NULL;
+Map cache_ptr_list = {0};
 Type *type_ptr(Type *base_type){
-     for (CachePtrType *it = ptr_list; it!=buff_end(ptr_list) ; it++ ){
-          if  ( it->base_type == base_type){
-               return it->ptr;
-          }
+     Type *get = map_get( &cache_ptr_list,(void *)base_type);
+     if ( get ){
+          return get;
      }
-
      Type *new = type_alloc(TYPE_PTR);
      new->ptr.base_type = base_type;
      new->size = PTR_SIZE;
      new->alignment = PTR_ALIGNMENT;
-     CachePtrType tmp = { new , base_type };
-     buff_push(ptr_list,tmp);
+     map_put( &cache_ptr_list, (void *)new->ptr.base_type, new);
      return new; 
 }
 
@@ -206,7 +199,8 @@ Type *type_enum = &ENUM_TYPE;
 
 
 
-static Sym **global_sym_list = NULL;
+//static Sym **global_sym_list = NULL;
+Map global_list = {};
 // Stack for variable scoping
 enum { MAX_LOCAL_DEF = 1024 };
 SymNode *local_sym_list[MAX_LOCAL_DEF];
@@ -304,15 +298,20 @@ Sym *sym_add_decl(Decl *decl){
           new->type = type_incomplete(new);
           new->state = SYM_RESOLVED;  
      }
-     buff_push(global_sym_list,new);
+//     buff_push(global_sym_list,new);
+     if ( new->name ){
+          map_put( &global_list, (void *)new->name, new); 
+     } else if (decl->kind != DECL_ENUM){
+          fatal("Variable declaration with no name!\n");
+     }
      if  ( decl->kind == DECL_ENUM ){
           Sym *tmp;
           for ( size_t i = 0; i < decl->enum_decl.num_enum_items; i++ ){
                tmp = new_sym(SYM_ENUM_CONST,decl->enum_decl.enum_items[i].name,decl);
                tmp->state = SYM_RESOLVED;
                tmp->type = type_int;
-               buff_push(global_sym_list,tmp); 
-          
+               map_put( &global_list, (void *)tmp->name, tmp );
+//               buff_push(global_sym_list,tmp); 
           }
      }
      return new;
@@ -328,12 +327,13 @@ Sym *sym_get(const char *name){
                }
           }
      }
-     for ( Sym **it = global_sym_list; it != buff_end(global_sym_list); it++ ){
+     /*for ( Sym **it = global_sym_list; it != buff_end(global_sym_list); it++ ){
           if ( (*it)->name == name ){
                return *it;
           }
-     } 
-     return NULL;
+     }*/
+     Sym *get = map_get( &global_list, (void *)name ); 
+     return get;
 }
 
 
@@ -345,7 +345,7 @@ Sym *resolve_name(const char *name){
      return new;
 }
 
-static Sym **ordered_syms = NULL;
+Sym **ordered_syms = NULL;
 ResolvedExpr resolved_null = {};
 ResolvedExpr resolve_expr(Expr *);
 ResolvedExpr resolve_expr_expected(Expr *,Type *);
@@ -1250,9 +1250,23 @@ void sym_add_type(const char *name,Type *type){
      new = new_sym(SYM_TYPE,name,NULL); 
      new->state = SYM_RESOLVED;
      new->type = type;
-     buff_push(global_sym_list,new);
+     //buff_push(global_sym_list,new);
+     map_put( &global_list, (void *)new->name, new );
 }
 
+void finalize_syms(void){
+     for ( size_t i = 0; i < global_list.cap; i++ ){
+          MapEntry *it = global_list.entries + i;
+          if ( it->key ){
+               Sym *sym = it->value;
+               resolve_sym( sym );
+               if ( sym->kind == SYM_FUNC ){
+                    resolve_func(sym);
+               }
+               complete_type( sym->type );
+          }
+     }
+}
 
 void resolve_test(void){
      init_intern_keyword();
@@ -1335,19 +1349,20 @@ void resolve_test(void){
           tmp_decl = parse_decl();
           sym_add_decl(tmp_decl);
      }
-    for ( Sym **it = global_sym_list; it != buff_end(global_sym_list); it++ ){
+/*    for ( Sym **it = global_sym_list; it != buff_end(global_sym_list); it++ ){
           resolve_sym(*it);
           if ( (*it)->kind == SYM_FUNC ){
                resolve_func(*it);
           }
           complete_type((*it)->type);
      }
-
+*/
+     finalize_syms(); 
      for ( Sym **it = ordered_syms; it != buff_end(ordered_syms); it++ ){
           print_decl( (*it)->decl );
           printf("\nAlignment: %zu, Size: %zu\n", (*it)->type->alignment,(*it)->type->size); 
           printf("\n");
      }
-     buff_free(global_sym_list);
+//     buff_free(global_sym_list);
      buff_free(ordered_syms);
 }
