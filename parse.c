@@ -104,7 +104,7 @@ Expr *parse_expr_operand(){
           Expr *expr = parse_expr_unary();
           return expr_cast(type,expr);
      }
-     syntax_error("Expected Expression but didn't get any thing");
+     parse_error("Expected Expression but didn't get any thing");
      return NULL;
 }
 
@@ -149,7 +149,7 @@ Expr *parse_expr_base(){
                if ( is_token(TOKEN_NAME) ){
                     operand = expr_field(operand,token.name);
                } else {
-                    syntax_error("Field access requires name to be final token\n");
+                    parse_error("Field access requires name to be final token\n");
                }
                next_token();
           } 
@@ -230,7 +230,9 @@ Expr *parse_expr_ternary(){
 }
 
 Expr *parse_expr(){
-     return parse_expr_ternary();
+     size_t line = token.line_number;
+     Expr *expr = parse_expr_ternary();
+     expr->location.line = line;
 }
 
 const char *parse_name(){
@@ -238,9 +240,9 @@ const char *parse_name(){
           const char *name = token.name;
           next_token();
           return token.name;
+     } else {
+          parse_error("Varible names should begin with a character. But begins with %.*s\n",(int)( token.end-token.start), token.start);
      }
-     else
-          syntax_error("Expected TOKEN_NAME, got crap instead");
      return NULL;
 }
 TypeSpec *parse_base_type(){
@@ -409,7 +411,7 @@ enum_item parse_enum_item(){
          //      next_token();
           
      } else {
-          syntax_error("Not valid name for enum");
+          parse_error("Not valid field name for enum");
      }
      return new_enum(name,expr) ;
      
@@ -438,6 +440,7 @@ Decl *parse_enum(){
 
 Decl *parse_decl(){
      Decl *new_decl = NULL;
+     size_t line = token.line_number;
      if ( match_keyword(enum_keyword) ){
           new_decl = parse_enum();
      } else if ( match_keyword(struct_keyword) ){
@@ -452,7 +455,11 @@ Decl *parse_decl(){
           new_decl = parse_typedef();
      } else if ( match_keyword(func_keyword) ){
           new_decl = parse_func_decl();
+     } else {
+          parse_error("Unkown keyword!\n");
+          assert( 0 );
      }
+     new_decl->location.line = line;
     return new_decl; 
 
 }
@@ -493,7 +500,7 @@ Case parse_switch_case(){
      buff_free(expr_list);
      if ( match_keyword(default_keyword) ){
           if ( is_default ){
-               syntax_error("Cant have duplicate definitions of default in same case\n");
+               parse_error("Cant have duplicate definitions of default in same case\n");
           }
           is_default = true;
           new_case.isdefault = true;
@@ -531,7 +538,7 @@ Stmt *parse_stmt_simple(){
      Expr *lhs = parse_expr();
      if ( match_token(TOKEN_COLON_ASSIGN) ){
           if ( lhs->kind != EXPR_NAME ){
-               syntax_error(":= must be preceded by a name");
+               parse_error(":= must be preceded by a name");
           }
           //parse expr
          // next_token();
@@ -549,7 +556,7 @@ Stmt *parse_stmt_simple(){
           if ( lhs->kind == EXPR_CALL ){
                return stmt_expr(lhs);
           }
-          syntax_error("Blank Statement has no use\n");
+          parse_error("Blank Statement has no use\n");
      }
 }
 Stmt *parse_stmt_for(){
@@ -566,7 +573,7 @@ Stmt *parse_stmt_for(){
     if ( !is_token(TOKEN_RPAREN) ){
          update = parse_stmt_simple();
          if ( update->kind == STMT_INIT){
-              syntax_error("Initialization is not allowed in for loop\n");
+              parse_error("Initialization is not allowed in for loop\n");
          }
     }
     expect_token(TOKEN_RPAREN);

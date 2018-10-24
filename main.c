@@ -13,6 +13,8 @@
 
 #include "common.c"
 #include "lex.c"
+#include "ast.h"
+#include "error.c"
 #include "print.c"
 #include "ast.c"
 #include "parse.c"
@@ -20,8 +22,8 @@
 #include "gen.c"
 #include "ion.c"
 
-
 void run_tests(void){
+     map_test();
 //     buff_test();
 //     str_intern_test();
 //     lex_test();
@@ -38,7 +40,7 @@ void run_tests(void){
 }
 
 int main(int argc, char **argv){
-//     run_tests();
-     ion_main(argc,argv); 
+     run_tests();
+//     ion_main(argc,argv); 
      return 0;
 }

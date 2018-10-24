@@ -1,3 +1,4 @@
+extern void parse_error( const char *, ... );
 typedef enum TokenKind{
      TOKEN_EOF = 0,
      TOKEN_LASTCHAR = 127,
@@ -221,7 +222,7 @@ void scan_int(void){
                     token.int_val = 0;
                     return;
                }
-               syntax_error("Invalid integer literal '%c' \n",*stream);
+               parse_error("Invalid integer literal '%c' \n",*stream);
           }
      }
 
@@ -231,11 +232,11 @@ void scan_int(void){
               break;
          }
          if ( digit > base ){
-              syntax_error("Digit '%c' out of range for base %"PRIu64"\n",*stream,base);
+              parse_error("Digit '%c' out of range for base %"PRIu64"\n",*stream,base);
               digit = 0;
          }
          if ( val > ( UINT64_MAX - digit )/base){ 
-              syntax_error("Integer literal overflow\n");
+              parse_error("Integer literal overflow\n");
               while ( isdigit(*stream) )
                    stream++;
               val = 0;
@@ -267,7 +268,7 @@ void scan_float(void){
           } else 
                stream++;
      } else {
-          syntax_error("Expected '.' in a float literal, but got '%c' instead.\n",*stream);
+          parse_error("Expected '.' in a float literal, but got '%c' instead.\n",*stream);
      }
 
      while ( isdigit(*stream) ){
@@ -275,7 +276,7 @@ void scan_float(void){
      }
      double val = strtod(start,NULL);
      if ( val == HUGE_VAL || val == -HUGE_VAL ){
-          syntax_error("Floating point overflow.\n");
+          parse_error("Floating point overflow.\n");
      }
      token.kind = TOKEN_FLOAT;
      token.float_val = val;
@@ -295,12 +296,12 @@ const char escape_to_char[256] = {
 void scan_char(){
      char val = 0;
      if ( *stream == '\'' ){
-          syntax_error("char literal cannot be empty.\n");
+          parse_error("char literal cannot be empty.\n");
      } else if ( *stream == '\\' ){
           stream++;
           val = escape_to_char[(unsigned char)*stream];
           if ( val == 0 && *stream != 0 ){
-               syntax_error("Invalid character literal escpae '\\%c'.\n",*stream);
+               parse_error("Invalid character literal escpae '\\%c'.\n",*stream);
           }
 
      } else {
@@ -308,7 +309,7 @@ void scan_char(){
      }
      stream++;
      if ( *stream != '\'' ){
-          syntax_error("Expected closing parenthesis for character literal, but got '%c' instead.\n",*stream);
+          parse_error("Expected closing parenthesis for character literal, but got '%c' instead.\n",*stream);
      }
      stream++;
      
@@ -327,7 +328,7 @@ void scan_str(void){
               stream++;
               val = escape_to_char[(unsigned char)*stream];
               if ( val == 0 && *stream != 0 ){
-                   syntax_error("Invalid character literal escpae '\\%c'.\n",*stream);
+                   parse_error("Invalid character literal escpae '\\%c'.\n",*stream);
               }
 
          } else {
@@ -338,7 +339,7 @@ void scan_str(void){
      }
 
      if ( *stream != '"' ){
-          syntax_error("Unexpected end of file before string closing quotes\n");
+          parse_error("Unexpected end of file before string closing quotes\n");
      }
      stream++;
      buff_push(str,0);
@@ -386,8 +387,10 @@ top:
                     if ( *stream == '\n' ){
                          token.line_number++;
                     }
-                    token.line_start = ++stream;
+                    ++stream;
                }
+               assert( !isspace(*stream) );
+               token.line_start = stream;
                goto top;
                break;
           case '.':
@@ -629,7 +632,7 @@ bool expect_keyword(const char *x){
      if ( match_keyword(x) ){
           return true;
      } else {
-          syntax_error("Expected %s but got %s insted",x,token.name);
+          parse_error("Expected %s but got %s insted",x,token.name);
           exit(1);
      }
      return false;
@@ -659,6 +662,33 @@ bool is_decl_keyword(){
 //     return err;
 //    
 //}
+//
+
+
+#define case1(cond,rv)\
+      case cond:\
+          return ( rv );\
+          break; \
+
+char get_token_char( TokenKind kind ){
+     switch ( kind ){
+          case1(TOKEN_LPAREN,'(') 
+          case1(TOKEN_RPAREN,')') 
+          case1(TOKEN_LBRACE,'{') 
+          case1(TOKEN_RBRACE,'}') 
+          case1(TOKEN_LBRACKET,'[') 
+          case1(TOKEN_RBRACKET,']') 
+          case1(TOKEN_DOT,'.') 
+          case1(TOKEN_QUESTION,'?') 
+          case1(TOKEN_COLON,':') 
+          case1(TOKEN_COMMA,',') 
+          case1(TOKEN_SEMICOLON,';') 
+          case1(TOKEN_ASSIGN,'=')
+          default:
+               assert(0);
+               break;
+     } 
+}
 
 size_t copy_token_kind_str( char *dest, size_t dest_size, TokenKind kind ){
      size_t n = 0;
@@ -677,11 +707,7 @@ size_t copy_token_kind_str( char *dest, size_t dest_size, TokenKind kind ){
                break;
 
           default:
-               if ( kind < 128 && isprint(kind) ){
-                    n = snprintf(dest,dest_size,"%c",kind);
-               }else {
-                    n = snprintf(dest,dest_size,"<ASCII %d>",kind);
-               }
+               n = snprintf(dest,dest_size,"\'%c\'",get_token_char(kind) );
                break;
      }
      return n;
@@ -706,19 +732,6 @@ bool expect_token(TokenKind kind){
           return false;
      }
 }
-
-// Parsing simple expressions using recursive descent
-//
-// Valid operators are +,-,*,/,-(unary),(),
-/*
-     The grammar for the parser is as follows:
-    expr = expr0
-    expr0 = expr1 { '+'|'-' expr0 }
-    expr1 = expr2 { '*'|'/' expr2 }
-    expr2 = expr3 { '^' expr2}
-    expr3 = { '-' expr3}|  expr4
-    expr4 = INT | '(' expr ')' 
- */
 int power_iter( int x, int n , int a ){
      if ( n == 0 ){
           return a;
@@ -734,109 +747,9 @@ int power( int x, int n){
      return power_iter(x,n,1) ;
 }
 
-
-/*
-int parse_expr(void);
-int parse_expr0(void);
-int parse_expr1(void);
-int parse_expr2(void);
-int parse_expr3(void);
-int parse_expr4(void);
-
-int parse_expr(void){
-     return parse_expr0();
-}
-
-int parse_expr0(void){
-     int val = parse_expr1();
-     while ( is_token('+') || is_token('-' ) ){
-          char op = token.kind;
-          next_token();
-          int rval = parse_expr1();
-          if ( op == '+' ){
-              val += rval; 
-          } else {
-               assert( op == '-' );
-               val -= rval;
-          }
-     }
-     return val;
-}
-
-int parse_expr1(void){
-     int val = parse_expr2();
-     while ( is_token('*') || is_token('/') ){
-          char op = token.kind;
-          next_token();
-          int rval = parse_expr2();
-          if ( op == '*' ){
-               val *= rval;
-          }else {
-               assert( op == '/' );
-               assert( rval != 0 );
-               val /= rval;
-          }
-     }
-     return val;
-}
-
-int parse_expr2(void){
-     int val = parse_expr3();
-     while ( match_token('^') ){
-         int rval = parse_expr2();
-         val = power(val,rval); 
-     }
-     return val;
-}
-
-int parse_expr3(void){
-     if ( match_token('-') ){
-          return -parse_expr3();
-     } else {
-          return parse_expr4();
-     }
-}
-
-int parse_expr4(void){
-     if ( is_token(TOKEN_INT) ){
-          int val = token.int_val;
-          next_token();
-          return val;
-     } else  if ( match_token('(') ){
-               int val = parse_expr();
-               expect_token(')');
-               return val;
-     } else {
-          fatal("expected integer or ( but got %s.\n",token_kind_str(token.kind) );
-     }
-     return token.kind;
-}
-
-
-int parse_expr_test(char *str){
-     init_stream(str);
-     return  parse_expr();
-}
-
-#define TOKEN_TEST(x) ( parse_expr_test(#x) == (x) )
-void expr_test(void){
-       assert(TOKEN_TEST(1+4));
-       assert( TOKEN_TEST(1*(2+3) ) );
-       assert(TOKEN_TEST(2-3-4-5) );
-       assert(TOKEN_TEST(2/3/4) );
-       assert( parse_expr_test("--3") == 3 );
-       assert( parse_expr_test("2^3") == 8 );
-       assert( parse_expr_test("2^2^2") == 16 );
-       assert( parse_expr_test("2^7") == 128 );
-       assert( parse_expr_test("1+2^2*3") == 13);
-       assert( parse_expr_test("2^(1+2)") == 8 );
-       assert( parse_expr_test("3^3") == 27 );
-}
-#undef TOKEN_TEST
-*/
-
 void init_stream( char *str){
      stream = str;
+     token.line_number = 1;
      next_token();
 }
 void print_token( Token tkn ){

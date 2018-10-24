@@ -1,7 +1,9 @@
+extern void parse_error( const char *, ... );
+extern void fatal( const char *, ... );
 #define BUF(x) x
 #define MAX(x,y) ( ( ( x ) < ( y ) )?( y ):( x ) )
 #define isOdd(x) (  ( x) & 01 )
-
+#define IS_POW2(x)  ( x && ( !( x & ( x - 1 ) ) ) )
 
 #define ARENA_ALIGNMENT 8
 
@@ -54,15 +56,6 @@ void *xrealloc(void *x, size_t size){
           return p;
      else
           exit(1);
-}
-
-void fatal(const char *format, ... ){
-     // Error printing function
-     va_list args;
-     va_start(args,format);
-     printf("FATAL : ");
-     vprintf(format,args);
-     va_end(args);
 }
 
 #define MIN_BUFF_SIZE 16 // the minimum amount of size to request to buffer
@@ -133,19 +126,6 @@ void buff_test(void){
      return;
 }
 
-void syntax_error(const char *fmt, ... ){
-     va_list args;
-     va_start(args,fmt);
-     printf("Syntax Error detected.. \n");
-     vprintf(fmt,args);
-     va_end(args);
-     exit(1);
-}
-
-
-
-
-
 typedef struct Arena {
      char *ptr; // pointer to the free area of the arena, always aligned to eight bits
      char *end; // pointer to the end of the arena 
@@ -210,51 +190,6 @@ void arena_test(void){
      arena_free(&arena);
 }
 
-// String Interning begins here
-
-const char *str_intern(const char *);
-const char *str_intern_range( const char *start, const char *end);
-Arena arena_intern;
-typedef struct Intern {
-     size_t len;
-     const char *str;
-} Intern;
-
-static Intern *intern;
-
-const char *str_intern_range( const char *start, const char *end){
-     size_t len = end - start;
-     for ( Intern *ip = intern; ip != buff_end(intern) ; ip++ ){
-          if ( ip->len == len && ( strncmp(ip->str,start,len) == 0 ) )
-               return ip->str;
-     }
-
-     char *string = arena_alloc(&arena_intern,len+1);
-     memcpy(string,start,len);
-     string[len] = 0;
-     Intern newIntern = {len,string};
-
-     buff_push(intern,newIntern );
-     return string;
-
-     
-}
-
-const char *str_intern( const char *start ){
-     return str_intern_range( start, start + strlen(start) ) ;
-}
-
-void str_intern_test(void){
-     char x[] = "hello";
-     char y[] = "hello";
-     char z[] = "hellozz";
-     assert(x!=y);
-     const char *px = str_intern(x);
-     const char *py = str_intern(y);
-     const char *pz = str_intern(z);
-     assert(px == py);
-     assert( px != pz );
-}
 
 /* File Handling */
 
@@ -334,4 +269,179 @@ void file_test(void){
      const char *tmp = "fuck this shit";
      export_to_c("./new.ion",tmp,strlen(tmp)*sizeof(char));
      printf("%s\n",stream);
+}
+
+
+/* Hashing */
+
+typedef struct MapEntry{
+     void *key;
+     void *value;
+     uint64_t hash;
+} MapEntry;
+
+typedef struct Map {
+     MapEntry *entries;
+     size_t len;
+     size_t cap;
+} Map;
+
+uint64_t int_hash( uint64_t x ){
+     x *= 0xff51afd7ed558ccdul;
+     x ^= ( x >> 32 );
+     return x;
+}
+
+uint64_t str_hash( char *str, size_t len ){
+     //FNV hashing 
+     uint64_t fnv_prime = 0x100000001b3ull;
+     uint64_t fnv_offset = 0xcbf29ce484222325ull;
+     uint64_t hash = fnv_offset;
+     for ( size_t i = 0; i < len ; i++ ){
+          hash ^= str[i]; 
+          hash *= fnv_prime;
+     }
+     return hash;
+}
+
+#define ptr_hash(x) ( int_hash((uintptr_t)( ( void *)(x) ) ) )
+
+void map_grow( Map *map, size_t new_cap ){
+     extern void map_put_hash( Map *map, void *key, void *value, uint64_t hash );
+     new_cap = MAX( 16, new_cap );
+     assert( IS_POW2(new_cap) );
+     Map new_map = {0};
+     new_map.cap = new_cap;
+     new_map.len = map->len;
+     new_map.entries = xcalloc( new_cap, sizeof(MapEntry) );
+     for ( size_t i = 0; i < map->cap; i++ ){
+          MapEntry *it = map->entries + i;
+          if ( it->key ){
+               map_put_hash( &new_map, it->key, it->value, it->hash );
+          }
+     }
+     *map = new_map;
+}
+
+void map_put_hash( Map *map, void *key, void *value, uint64_t hash ){
+     if ( key == NULL ){
+          fatal("Invalid Insertion of key NULL\n");
+     }
+     if ( map->len * 2 >= map->cap ){
+          map_grow(map,map->cap*2);
+     }
+     assert( map->len * 2 <= map->cap );
+     assert( IS_POW2(map->cap) );
+     uint64_t i = hash & ( map->cap - 1 );
+     while ( true ){
+          MapEntry *it = map->entries + i;
+          if ( !it->key ){
+               it->key = key;
+               it->value = value;
+               it->hash = hash;
+               map->len++;
+               return;
+          } else if ( it->key == key ){
+               it->value = value;
+               return;
+          }
+          i++;
+          if ( i == map->cap ){
+               i = 0;
+          }
+          
+     }
+}
+
+void *map_get_hash( Map *map, void *key , uint64_t hash ){
+     assert( map->cap );
+     if ( map->cap == 0 ){
+          return NULL;
+     }
+     uint64_t i = hash & ( map->cap - 1 );
+     while ( true ){
+          MapEntry *it = map->entries + i;
+          if ( it->key == key ){
+               return it->value;
+          } else if ( !it->key ){
+               return NULL;
+          }
+          i++;
+          if ( i == map->cap ){
+               i = 0;
+          }
+     }
+}
+
+void *map_get( Map *map, void *key ){
+     return map_get_hash( map, key, ptr_hash(key) );
+}
+
+void *map_put( Map *map, void *key, void *value ){
+     map_put_hash( map , key , value, ptr_hash(key) );
+}
+
+void map_test( void ){
+     assert( IS_POW2(32) );
+     assert( !IS_POW2(31) );
+     Map m1 = {0};
+     map_put( &m1, (void *)42, (void *)1 );
+     void *x = map_get( &m1, (void *)42 );
+     assert( x == (void *)1 );
+     enum { N = 1024 };
+     for ( int i = 1; i < 1024; i++ ){
+          map_put( &m1, (void *)i, (void *)(i+1) );
+     }
+     for ( int i = 1; i < 1024; i++ ){
+          void *x = map_get( &m1, ( void *)i );
+          assert( x == (void *)(i+1) );
+     }
+}
+
+
+// String Interning begins here
+
+const char *str_intern(const char *);
+const char *str_intern_range( const char *start, const char *end);
+Arena arena_intern;
+typedef struct Intern {
+     size_t len;
+     const char *str;
+} Intern;
+
+
+static Intern *intern;
+
+const char *str_intern_range( const char *start, const char *end){
+     size_t len = end - start;
+     for ( Intern *ip = intern; ip != buff_end(intern) ; ip++ ){
+          if ( ip->len == len && ( strncmp(ip->str,start,len) == 0 ) )
+               return ip->str;
+     }
+
+     char *string = arena_alloc(&arena_intern,len+1);
+     memcpy(string,start,len);
+     string[len] = 0;
+     Intern newIntern = {len,string};
+
+     buff_push(intern,newIntern );
+     return string;
+
+     
+}
+
+const char *str_intern( const char *start ){
+     return str_intern_range( start, start + strlen(start) ) ;
+}
+
+void str_intern_test(void){
+     char x[] = "hello";
+     char y[] = "hello";
+     char z[] = "hellozz";
+     assert(x!=y);
+     const char *px = str_intern(x);
+     const char *py = str_intern(y);
+     const char *pz = str_intern(z);
+     assert(px == py);
+     assert( px != pz );
 }

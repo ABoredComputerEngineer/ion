@@ -1,4 +1,4 @@
-
+#pragma once
 typedef struct Type Type;
 typedef struct Sym Sym;
 typedef struct Decl Decl;
@@ -7,6 +7,10 @@ typedef struct Stmt Stmt;
 typedef enum TypeSpecKind TypeSpecKind;
 typedef struct TypeSpec TypeSpec;
 
+typedef struct SrcLoc {
+     const char *fname; // file name ( prob filled later )
+     size_t line;
+} SrcLoc;
 typedef struct StmtBlock {
      size_t num_stmts;
      BUF(Stmt **stmts); // Buffer to hold a list of statements
@@ -137,7 +141,7 @@ struct Decl{
      DeclKind kind;
      Sym *sym;
      const char *name;
-     size_t line;
+     SrcLoc location;
      union {
           enum_def enum_decl;
           aggregate_def aggregate_decl;
@@ -214,6 +218,7 @@ typedef struct cast_def{
 // [exprdef]
 struct Expr {
      ExprKind kind;
+     SrcLoc location;
      union {
           uint64_t int_val;
           double float_val;
@@ -305,7 +310,7 @@ typedef struct stmt_init_def{
 struct Stmt{
      StmtKind kind;
 //     Expr *expr; //  for statements like for, while ,return, switch do while etc, cond expression for if .
-
+     SrcLoc location;
      union {
           stmt_return_def return_stmt;
           stmt_while_def while_stmt;

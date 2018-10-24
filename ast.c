@@ -72,6 +72,7 @@ TypeSpec *typespec_func(TypeSpec **args,size_t num_args, TypeSpec *ret_type){
 Expr *expr_new( ExprKind kind ){
      Expr *new_expr = ast_alloc(sizeof(Expr));
 //     Expr *new_expr = xcalloc(1,sizeof(Expr));
+//     new_expr->location.line = token.line_number;
      new_expr->kind = kind;
      return new_expr;
 }
@@ -183,6 +184,7 @@ Decl *decl_new( DeclKind kind, const char *name ){
      Decl *new_decl = ast_alloc(sizeof(Decl));
      new_decl->kind = kind;
      new_decl->name = name;
+//     new_decl->location.line = token.line_number;
      return new_decl;
 }
 
@@ -333,6 +335,7 @@ StmtBlock new_block(size_t num_stmts, Stmt **stmts){
 Stmt *new_stmt(StmtKind kind){
 //     Stmt *new = xcalloc(1,sizeof(Stmt));
      Stmt *new = ast_alloc(sizeof(Stmt));
+//     new->location.line = token.line_number;
      new->kind = kind;
     return new; 
 }
