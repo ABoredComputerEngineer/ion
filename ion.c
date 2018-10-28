@@ -52,7 +52,8 @@ bool ion_main(int argc, char **argv){
      assert(argc>1);
      size_t len = strlen(argv[1]);
      char *path = malloc(len*sizeof(char) + 1);
-     snprintf(path,len*sizeof(char)+1,"%s",argv[1]);
+//     snprintf(path,len*sizeof(char)+1,"%s",argv[1]);
+     strcpy( path, argv[1] ); 
      if ( ion_compile_file(path) ){
           printf("Compilation Succesfull!\n");
      } else {

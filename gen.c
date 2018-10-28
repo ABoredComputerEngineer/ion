@@ -68,7 +68,6 @@ void gen_expr(Expr *expr){
                printf(")");
                break;
           case EXPR_CALL: {
-               char *result = NULL;
                gen_expr(expr->func_call_expr.operand);
                printf("(");
                for ( size_t i = 0; i < expr->func_call_expr.num_args ; i++ ){
@@ -99,7 +98,6 @@ void gen_expr(Expr *expr){
                printf(")");
                break;
           case EXPR_COMPOUND:{
-               char *result = NULL;
                if ( expr->compound_expr.resolved_type->kind  != TYPE_ARRAY ){
                     printf("(%s){",type_to_cdecl(expr->compound_expr.resolved_type,""));
                } else {
@@ -134,13 +132,15 @@ void gen_expr(Expr *expr){
                gen_expr(expr->sizeof_expr);
                printf(")");
                break;
+          default:
+               fatal("Unknown Expression kind!\n");
+               break;
      }
 
 }
 
 #define paren_str(s,x) ( ( *s )?"("#x")":#x)
 char *type_to_cdecl( Type *type , char *str ){
-     
      switch ( type->kind ){
           case TYPE_INT:
                return bprintf("int%s%s",str?" ":"",str?str:""); 
@@ -172,12 +172,15 @@ char *type_to_cdecl( Type *type , char *str ){
           case TYPE_UNION:
                return bprintf("%s %s",type->sym->name,str);
                break;
+          default:
+               fatal("Unkown type kind !\n");
+               break;
      }
+     return NULL;
 }
 #undef paren_str
 bool need_semi_colon = true;
-char *gen_code_var(Sym *sym){
-     char *result = NULL;
+void gen_code_var(Sym *sym){
      assert( sym->type );
      printf("%s",type_to_cdecl(sym->type,(char *)sym->name));
      if ( sym->decl->var_decl.expr ){
@@ -230,7 +233,6 @@ void gen_stmt(Stmt *stmt){
      switch ( stmt->kind ){
           case STMT_INIT:{
                Sym *sym = stmt->init_stmt.sym;
-               char *result = NULL;
                assert( sym->type );
                printf("%s",type_to_cdecl(sym->type,(char *)sym->name));
                assert( stmt->init_stmt.rhs);
@@ -344,6 +346,9 @@ void gen_stmt(Stmt *stmt){
                need_semi_colon = true;
                gen_code_var(stmt->decl_stmt->sym);
                break;
+          default:
+               fatal("Unkown statement kind!\n");
+               break;
      }
 }
 #undef semi_colon
@@ -365,9 +370,9 @@ char *gen_stmt_block(StmtBlock block){
 
 void gen_code_func(Sym *sym){
      Decl *decl = sym->decl;
-     char *result = NULL;
+     //char *result = NULL;
      printf("%s", gen_func_decl(sym));
-     char *result1 = gen_stmt_block(decl->func_decl.block); 
+     gen_stmt_block(decl->func_decl.block); 
      printf("\n");
 }
 
@@ -402,15 +407,18 @@ char *gen_code(Sym *sym){
           case SYM_FUNC:
                gen_code_func(sym);
                break;
+          default:
+               fatal("Unknown symbol type!\n");
+               break;
      }
      return NULL;
 }
-
+/*
 void type_gen_test(void){
      char *c1 = type_to_cdecl( type_int, "x");
      char *c2 = type_to_cdecl( type_ptr(type_int), "y");
      char *c3 = type_to_cdecl( type_ptr(type_ptr(type_int)), "y");
-}
+}*/
 
 DeclList *parse_decls(void){
      Decl **tmp_decl_list = NULL;
@@ -418,11 +426,11 @@ DeclList *parse_decls(void){
           buff_push(tmp_decl_list,parse_decl());
      }
      size_t len = buff_len(tmp_decl_list);
-     Decl **decl_list = arena_dup(&gen_arena, tmp_decl_list, sizeof(tmp_decl_list)*len);
-     buff_free(tmp_decl_list);
+//     Decl **decl_list = arena_dup(&gen_arena, tmp_decl_list, sizeof(tmp_decl_list)*len);
+//     buff_free(tmp_decl_list);
      DeclList *tmp = arena_alloc(&gen_arena,sizeof(DeclList) );
      tmp->num_decls = len;
-     tmp->decl_list = decl_list;
+     tmp->decl_list = tmp_decl_list;
      return tmp;
 }
 
@@ -438,21 +446,11 @@ void gen_forward_decls( void ){
                     }
                }
           } else if ( (*it)->kind == SYM_FUNC ){
-               Type *type = (*it)->type;
-               printf("%s",type_to_cdecl(type->func.ret_type,NULL));
-               printf(" %s(",(*it)->name );
-               for ( size_t i = 0;\
-                    i < type->func.num_params;\
-                    i++ ){
-                    printf("%s%s",\
-                              ( i==0 )?"":",",\
-                              type_to_cdecl(type->func.param_list[i],NULL));
-
-               }
-               printf(");\n");           
+                    printf("%s;\n",gen_func_decl(*it));
           }
      }
 }
+#if 0
 void gen_test(void){
      sym_add_type(str_intern("int"),type_int);
      sym_add_type(str_intern("float"),type_float);
@@ -504,3 +502,4 @@ void gen_test(void){
 //        "struct T { a: int[3]; };\n"
      };
 }
+#endif

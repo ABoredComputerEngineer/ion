@@ -405,6 +405,29 @@ top:
                stream++;
                scan_str();
                break;
+          case '/':
+               stream++;
+               token.kind = TOKEN_DIV;
+               if ( *stream == '/'){
+                    stream++;
+                    while ( *stream != '\n' )
+                         stream++;
+                    goto top;
+               } else if ( *stream == '='){
+                    token.kind = TOKEN_DIV_ASSIGN;
+                    stream++;
+               } else if ( *stream == '*' ){
+                    while ( true ){
+                         stream++;
+                         if ( *stream == '*' ){
+                              stream++;
+                              if ( *stream == '/' ){
+                                   goto top;
+                              }
+                         }
+                    }
+               }
+               break;
 /*   
  *   CASES FOR MULTI CHARACTER TOKENS LIKE INCREMENT,DECREMENT, LSHIFT, RSHIFT ETC..
 #define TOKEN_CASE1(c,c1,k1) \
@@ -429,7 +452,7 @@ top:
           TOKEN_CASE3('+',TOKEN_ADD,'=',TOKEN_ADD_ASSIGN,'+',TOKEN_INC)
           TOKEN_CASE3('-',TOKEN_SUB,'=',TOKEN_SUB_ASSIGN,'-',TOKEN_DEC)
           TOKEN_CASE2('*',TOKEN_MUL,'=',TOKEN_MUL_ASSIGN)
-          TOKEN_CASE2('/',TOKEN_DIV,'=',TOKEN_DIV_ASSIGN)
+//          TOKEN_CASE2('/',TOKEN_DIV,'=',TOKEN_DIV_ASSIGN)
           TOKEN_CASE2('%',TOKEN_MOD,'=',TOKEN_MOD_ASSIGN)
           TOKEN_CASE2('^',TOKEN_XOR,'=',TOKEN_XOR_ASSIGN)
           TOKEN_CASE3('|',TOKEN_OR,'=',TOKEN_OR_ASSIGN,'|',TOKEN_OR)

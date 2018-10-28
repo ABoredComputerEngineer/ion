@@ -86,15 +86,15 @@ char *print_buff(char *buffer, const char *fmt,...){
      char *dest = buff_end(buffer) ; // dest points to the character NULL  of the string
      size_t cap = buff_cap(buffer) - buff_len(buffer) * sizeof(*buffer);
      size_t new = 1 + vsnprintf(dest,cap,fmt,args);
-     size_t len = buff_len(buffer);
-     size_t buff_cap = buff_cap(buffer);
+     //size_t len = buff_len(buffer);
+     //size_t buff_cap = buff_cap(buffer);
 
      va_end(args);
      if ( new > cap ){
           va_start(args,fmt);
           buff_fit(buffer,new); // increases the size of buffer to fit new string
-     len = buff_len(buffer);
-     buff_cap = buff_cap(buffer);
+     //len = buff_len(buffer);
+     //buff_cap = buff_cap(buffer);
           cap = buff_cap(buffer)-buff_len(buffer)*sizeof(*buffer);
           dest = buff_end(buffer) ;
           new = 1+vsnprintf(dest,cap,fmt,args);
@@ -139,6 +139,7 @@ void arena_grow(Arena *arena, size_t size ){
      arena->ptr = xmalloc( alloc_size );
      arena->end = arena->ptr + alloc_size ;
      assert( (size_t)(arena->end - arena->ptr) == alloc_size );
+     assert (size <= alloc_size);
      //assert(arena->blocks == NULL );
      buff_push(arena->blocks,arena->ptr);
 }
@@ -147,7 +148,7 @@ void arena_grow(Arena *arena, size_t size ){
 void *arena_alloc(Arena *arena,size_t size ){
      if ( size >= ( size_t )(arena->end-arena->ptr)){
           arena_grow(arena,size);
-          assert(size < (size_t)(arena->end-arena->ptr) );
+          assert(size <= (size_t)(arena->end-arena->ptr) );
      }
 
      void *ptr = arena->ptr;
@@ -234,8 +235,9 @@ const char *open_ion_file(const char *path){
      if ( fseek( fp, 0, SEEK_SET) != 0 ){
           check_error(fp,"fseek()");
      }
-     char *buffer = xcalloc(size, sizeof(char));
+     char *buffer = xcalloc(size+1, sizeof(char));
      size_t error = fread(buffer,sizeof(char),size,fp);
+     buffer[size] = '\0';
      if ( error && error != size ){
           fatal("Corrupted file!\n");
           exit(EXIT_FAILURE);
@@ -245,7 +247,7 @@ const char *open_ion_file(const char *path){
 
 }
 
-void *export_to_c(const char *path,const char *out, size_t len){
+void export_to_c(const char *path,const char *out, size_t len){
      const char *extension = rev_str_search(path,".ion");
      size_t path_size = (size_t)(extension - path);
      size_t final_size = path_size + 2 *sizeof(char) + 2;
@@ -376,7 +378,7 @@ void *map_get( Map *map, void *key ){
      return map_get_hash( map, key, ptr_hash(key) );
 }
 
-void *map_put( Map *map, void *key, void *value ){
+void map_put( Map *map, void *key, void *value ){
      map_put_hash( map , key , value, ptr_hash(key) );
 }
 
@@ -438,8 +440,8 @@ void str_intern_test(void){
      char y[] = "hello";
      char z[] = "hellozz";
      assert(x!=y);
-     char x2[] = "costarring";
-     char y2[]  = "liquid";
+     //char x2[] = "costarring";
+     //char y2[]  = "liquid";
 //     assert( str_hash(x2,strlen(x2)) == str_hash(y2,strlen(y2)) );
      const char *px = str_intern(x);
      const char *py = str_intern(y);

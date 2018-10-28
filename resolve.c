@@ -601,6 +601,9 @@ void resolve_stmt(Stmt *stmt, Type *ret_type){
                resolve_stmt_decl(stmt->decl_stmt);
                break;
           }
+          default:
+               fatal("Unkown statement kind!\n");
+               break;
 
      }     
 }
@@ -690,12 +693,15 @@ Type *resolve_var_decl(Decl *decl){
 Type *resolve_type_decl(Decl *decl){
      if (decl->kind == DECL_TYPEDEF){
           return resolve_typespec(decl->typedef_decl.type);
-     } else if ( decl->kind = DECL_ENUM ){
+     } else if ( decl->kind == DECL_ENUM ){
           return type_int;
+     } else {
+          fatal("Unkown type in %s !\n", decl->name );
+          return NULL;
      }
 }
 
-void *resolve_sym(Sym *sym){
+Sym *resolve_sym(Sym *sym){
 
      /*
       * Structs and union are treated as incomplete types so they are taken as resolved types.
@@ -733,6 +739,7 @@ void *resolve_sym(Sym *sym){
      sym->state = SYM_RESOLVED;
      sym->decl->sym  = sym;
      buff_push(ordered_syms,sym);
+     return sym;
 }
 
 ResolvedExpr resolve_null;
