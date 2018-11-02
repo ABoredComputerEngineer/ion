@@ -37,13 +37,14 @@ struct Type {
      size_t size;
      size_t alignment;
      Sym *sym;
+     bool is_typedef;
      union {
           struct {
                Type *base_type;
           }ptr;
           struct {
                Type *base_type;
-               size_t size;
+               int64_t size;
           } array;
           struct {
                TypeField *fields;
@@ -101,7 +102,6 @@ Type *type_alloc(TypeKind kind){
 }
 
 
-//CachePtrType *ptr_list = NULL;
 Map cache_ptr_list = {0};
 Type *type_ptr(Type *base_type){
      Type *get = map_get( &cache_ptr_list,(void *)base_type);
@@ -199,8 +199,8 @@ Type *type_enum = &ENUM_TYPE;
 
 
 
-//static Sym **global_sym_list = NULL;
-Map global_list = {};
+Sym **global_sym_list = NULL;
+Map global_syms= {};
 // Stack for variable scoping
 enum { MAX_LOCAL_DEF = 1024 };
 SymNode *local_sym_list[MAX_LOCAL_DEF];
@@ -260,6 +260,10 @@ Sym *sym_var(const char *name, Type *type){
     return new;
 }
 
+void sym_add_global( Sym *sym ){
+     map_put( &global_syms, (void *)sym->name, sym); 
+     buff_push( global_sym_list, sym );
+}
 
 Sym *sym_add_decl(Decl *decl){
      if ( sym_get(decl->name) ){
@@ -298,9 +302,8 @@ Sym *sym_add_decl(Decl *decl){
           new->type = type_incomplete(new);
           new->state = SYM_RESOLVED;  
      }
-//     buff_push(global_sym_list,new);
      if ( new->name ){
-          map_put( &global_list, (void *)new->name, new); 
+          sym_add_global( new );
      } else if (decl->kind != DECL_ENUM){
           fatal("Variable declaration with no name!\n");
      }
@@ -310,8 +313,7 @@ Sym *sym_add_decl(Decl *decl){
                tmp = new_sym(SYM_ENUM_CONST,decl->enum_decl.enum_items[i].name,decl);
                tmp->state = SYM_RESOLVED;
                tmp->type = type_int;
-               map_put( &global_list, (void *)tmp->name, tmp );
-//               buff_push(global_sym_list,tmp); 
+               sym_add_global( tmp );
           }
      }
      return new;
@@ -327,12 +329,7 @@ Sym *sym_get(const char *name){
                }
           }
      }
-     /*for ( Sym **it = global_sym_list; it != buff_end(global_sym_list); it++ ){
-          if ( (*it)->name == name ){
-               return *it;
-          }
-     }*/
-     Sym *get = map_get( &global_list, (void *)name ); 
+     Sym *get = map_get( &global_syms, (void *)name ); 
      return get;
 }
 
@@ -457,7 +454,11 @@ Type *resolve_typespec(TypeSpec *typespec){
           case TYPESPEC_ARRAY:{
                Type *type = resolve_typespec(typespec->array.base_type);
                complete_type(type);
-               return type_array(type, resolve_int_const_expr(typespec->array.size));
+               if ( typespec->array.size ){
+                    return type_array(type, resolve_int_const_expr(typespec->array.size));
+               } else {
+                    return type_array(type, 0ll );
+               } 
 	          break;
           }
           case TYPESPEC_POINTER:
@@ -691,14 +692,17 @@ Type *resolve_var_decl(Decl *decl){
 
 
 Type *resolve_type_decl(Decl *decl){
+     Type *type = NULL;
      if (decl->kind == DECL_TYPEDEF){
-          return resolve_typespec(decl->typedef_decl.type);
+          type = resolve_typespec(decl->typedef_decl.type);
      } else if ( decl->kind == DECL_ENUM ){
-          return type_int;
+          type = type_int;
      } else {
           fatal("Unkown type in %s !\n", decl->name );
           return NULL;
      }
+     type->is_typedef = true;
+     return type;
 }
 
 Sym *resolve_sym(Sym *sym){
@@ -729,6 +733,7 @@ Sym *resolve_sym(Sym *sym){
               break;
          case SYM_FUNC:
               sym->type = resolve_func_decl(sym->decl);
+              resolve_func(sym);
               break;
           case SYM_ENUM_CONST:
                break;
@@ -970,6 +975,119 @@ ResolvedExpr resolve_expr_binary(Expr *expr){
      }
 }
 
+void resolve_expr_aggregate( Expr *expr , Type *type){
+     if ( expr->compound_expr.num_args > type->aggregate.num_fields ){
+          resolve_error(&expr->location,"Compound expr has more members than the type\n");
+     }
+     ResolvedExpr new = {};
+     size_t currentIndex = 0;
+     /* Resolving a compound expr works as follows :
+      * set the currentIndex to 0
+      * if there is no given name for the initializer, resolve the expr for the given type in the current index of the filed
+      * if there is a given name, set the current index to the index where the name is and resolve the type of the field
+      */
+     for ( size_t i = 0; i < expr->compound_expr.num_args; i++ ){
+          CompoundField tmp = expr->compound_expr.fields[i];
+          if ( tmp.kind == FIELD_INDEX ){
+               resolve_error(&expr->location,"Attempt to use index initializer in a non array data type!\n");
+          } else if ( tmp.kind == FIELD_NONE ){
+               assert(!tmp.field_expr);
+               if ( currentIndex > type->aggregate.num_fields - 1 ){
+                    resolve_error(&expr->location,"Excess initializer for struct \n");
+               }
+               new = resolve_expr_expected(tmp.expr,type->aggregate.fields[currentIndex].type);
+               if ( new.type != type->aggregate.fields[currentIndex].type ){
+                    resolve_error(&expr->location,"Expression and field type do not match!\n");
+               }
+               currentIndex++;
+          } else {
+               assert( tmp.kind == FIELD_NAME );
+               if ( tmp.field_expr->kind != EXPR_NAME ){
+                    resolve_error(&expr->location,"Initializer is not a name \n");
+               }
+               Type *field_type = NULL;
+               for ( size_t z = 0; z < type->aggregate.num_fields; z++ ){
+                    if ( tmp.field_expr->name == type->aggregate.fields[z].name ){
+                         currentIndex = z;
+                         field_type = type->aggregate.fields[z].type;
+                         break;
+                    }
+               }
+               if ( !field_type ){
+                   resolve_error(&expr->location,"Field %s  does not exist in the struct.\n",tmp.field_expr->name);
+               }
+               new = resolve_expr_expected(tmp.expr,field_type); 
+               if ( new.type != field_type ){
+                    resolve_error(&expr->location,"Expression and field type do not match!\n");
+               }
+               currentIndex++;
+          } 
+     }
+}
+
+void resolve_expr_array( Expr *expr, Type *type ){
+     assert(type->kind == TYPE_ARRAY );
+     if ( type->array.size == 0 ){
+          /* Make sure that expr exists if no size is defined for the array.
+           * e.g. var x : int[] = { 1, 2, 3 };
+           * Expr should never be null here, but just for sanity check
+           */
+          assert( expr );
+     } else if ( type->array.size < 0 ){
+          resolve_error( &expr->location, "Can't have negative size arrays\n");
+     } else if ( expr->compound_expr.num_args > type->array.size ){
+          resolve_error(&expr->location,"Array expression has more members than the array length\n");
+     }
+     ResolvedExpr new = {};
+     ResolvedExpr resolved_field_expr = {};
+     size_t array_size = 0;
+     size_t currentIndex = 0;
+     for ( size_t i = 0; i < expr->compound_expr.num_args; i++ ){
+          CompoundField tmp = expr->compound_expr.fields[i];
+          if ( tmp.kind == FIELD_INDEX ){
+               if (!tmp.field_expr){
+                    /* e.g. var x: int [] = { [1] }; or sth */
+                    resolve_error(&expr->location,"Can't have empty field expressions!!\n");
+               }
+               resolved_field_expr = resolve_expr(tmp.field_expr); 
+               if ( resolved_field_expr.type != type_int ){
+                    /* e.g. var x: int [] = { [1.2] = 2 }; or sth */
+                    resolve_error(&expr->location,"Index expressions must be of type int\n");
+               } else if ( !resolved_field_expr.is_const ){
+                    resolve_error(&expr->location,"Iniializer expression for index must be a constant.\n");
+               }
+               assert(resolved_field_expr.is_const);
+               if ( resolved_field_expr.int_val < 0 ){
+                    resolve_error(&expr->location,"Can\'t have negative indices in array!\n");
+               } else {
+                    currentIndex =  resolved_field_expr.int_val;
+                    if ( type->array.size && currentIndex > type->array.size ){
+                         resolve_error(&expr->location,"Index value exceed the array bounds!\n");
+                    }
+               } 
+               currentIndex++;
+          }  else if ( tmp.kind == FIELD_NAME ){
+               resolve_error(&expr->location,"Attempt to use field initializer in a non struct or union type!\n");
+          }else {
+               assert(tmp.kind == FIELD_NONE );
+               if ( currentIndex > type->array.size - 1 ){
+                    resolve_error(&expr->location,"Initializing out of bound!\n");
+                    
+               }
+               currentIndex++;
+          }
+          new = resolve_expr_expected(tmp.expr,type->array.base_type);
+          if ( new.type != type->array.base_type ){
+               resolve_error(&expr->location,"Type mismatch with array type\n");
+          }
+          array_size = MAX( array_size, currentIndex );
+          
+     }
+     if ( type->array.size == 0 ){
+          type->array.size = array_size ;
+     }
+}
+
 ResolvedExpr resolve_expr_compound(Expr *expr, Type *expected_type){
      Type *comp_type = NULL;
      if ( !expected_type && !expr->compound_expr.type ){
@@ -981,102 +1099,21 @@ ResolvedExpr resolve_expr_compound(Expr *expr, Type *expected_type){
           }
      } 
      
+     /* If there is an expected type for the compound expr use it, otherwise use the type specified
+      * e.g var x:int [8] =  { 1, 2, 3}; uses expected type of int array of size 8
+      * var x = ( int [8] ){ 1 , 2, 3 }; uses the resolved type from the specified type i.e int[8]
+      */
      Type *type = expected_type? expected_type : resolve_typespec(expr->compound_expr.type);
+     
      complete_type(type);
      
-     //assert( type->kind == TYPE_STRUCT ); 
      if ( type->kind != TYPE_STRUCT && type->kind != TYPE_UNION && type->kind != TYPE_ARRAY ){
           resolve_error(&expr->location,"Attempt to use compound expression on a non-compound type\n");
      }
      if ( type->kind == TYPE_STRUCT || type->kind == TYPE_UNION){
-          if ( expr->compound_expr.num_args > type->aggregate.num_fields ){
-               resolve_error(&expr->location,"Compound expr has more members than the type\n");
-          }
-          ResolvedExpr new = {};
-          size_t currentIndex = 0;
-          for ( size_t i = 0; i < expr->compound_expr.num_args; i++ ){
-               CompoundField tmp = expr->compound_expr.fields[i];
-               if ( tmp.kind == FIELD_INDEX ){
-                    resolve_error(&expr->location,"Attempt to use index initializer in a non array data type!\n");
-               } else if ( tmp.kind == FIELD_NONE ){
-                    assert(!tmp.field_expr);
-                    if ( currentIndex > type->aggregate.num_fields - 1 ){
-                         resolve_error(&expr->location,"Excess initializer for struct \n");
-                    }
-                    new = resolve_expr_expected(tmp.expr,type->aggregate.fields[currentIndex].type);
-                    if ( new.type != type->aggregate.fields[currentIndex].type ){
-                         resolve_error(&expr->location,"Expression and field type do not match!\n");
-                    }
-                    currentIndex++;
-               } else {
-                    assert( tmp.kind == FIELD_NAME );
-                    if ( tmp.field_expr->kind != EXPR_NAME ){
-                         resolve_error(&expr->location,"Initializer is not a name \n");
-                    }
-                    Type *field_type = NULL;
-                    for ( size_t z = 0; z < type->aggregate.num_fields; z++ ){
-                         if ( tmp.field_expr->name == type->aggregate.fields[z].name ){
-                              currentIndex = z;
-                              field_type = type->aggregate.fields[z].type;
-                              break;
-                         }
-                    }
-                    if ( !field_type ){
-                        resolve_error(&expr->location,"Field %s  does not exist in the struct.\n",tmp.field_expr->name);
-                    }
-                    new = resolve_expr_expected(tmp.expr,field_type); 
-                    if ( new.type != field_type ){
-                         resolve_error(&expr->location,"Expression and field type do not match!\n");
-                    }
-                    currentIndex++;
-               } 
-          }
+          resolve_expr_aggregate( expr , type );
      } else {
-          assert(type->kind == TYPE_ARRAY );
-          if ( expr->compound_expr.num_args > type->array.size ){
-               resolve_error(&expr->location,"Array expression has more members than the array length\n");
-          }
-          ResolvedExpr new = {};
-          ResolvedExpr resolved_field_expr = {};
-          size_t currentIndex = 0;
-          for ( size_t i = 0; i < expr->compound_expr.num_args; i++ ){
-               CompoundField tmp = expr->compound_expr.fields[i];
-               if ( tmp.kind == FIELD_INDEX ){
-                    if (!tmp.field_expr){
-                         resolve_error(&expr->location,"Can't have empty field expressions!!\n");
-                    }
-                    resolved_field_expr = resolve_expr(tmp.field_expr); 
-                    if ( resolved_field_expr.type != type_int ){
-                         resolve_error(&expr->location,"Index expressions must be of type int\n");
-                    } else if ( !resolved_field_expr.is_const ){
-                         resolve_error(&expr->location,"Iniializer expression for index must be a constant.\n");
-                    }
-                    assert(resolved_field_expr.is_const);
-                    if ( resolved_field_expr.int_val < 0 ){
-                         resolve_error(&expr->location,"Can\'t have negative indices in array!\n");
-                    } else {
-                         currentIndex =  resolved_field_expr.int_val;
-                         if ( currentIndex > type->array.size ){
-                              resolve_error(&expr->location,"Index value exceed the array bounds!\n");
-                         }
-                    } 
-                    currentIndex++;
-               }  else if ( tmp.kind == FIELD_NAME ){
-                    resolve_error(&expr->location,"Attempt to use field initializer in a non struct or union type!\n");
-               }else {
-                    assert(tmp.kind == FIELD_NONE );
-                    if ( currentIndex > type->array.size - 1 ){
-                         resolve_error(&expr->location,"Initializing out of bound!\n");
-                         
-                    }
-                    currentIndex++;
-               }
-               new = resolve_expr_expected(tmp.expr,type->array.base_type);
-               if ( new.type != type->array.base_type ){
-                    resolve_error(&expr->location,"Type mismatch with array type\n");
-               }
-               
-          }
+          resolve_expr_array( expr, type );
      } 
      expr->compound_expr.resolved_type = type;
      return resolve_rvalue(type);
@@ -1257,21 +1294,17 @@ void sym_add_type(const char *name,Type *type){
      new = new_sym(SYM_TYPE,name,NULL); 
      new->state = SYM_RESOLVED;
      new->type = type;
-     //buff_push(global_sym_list,new);
-     map_put( &global_list, (void *)new->name, new );
+     sym_add_global( new );
 }
 
 void finalize_syms(void){
-     for ( size_t i = 0; i < global_list.cap; i++ ){
-          MapEntry *it = global_list.entries + i;
-          if ( it->key ){
-               Sym *sym = it->value;
-               resolve_sym( sym );
-               if ( sym->kind == SYM_FUNC ){
-                    resolve_func(sym);
-               }
-               complete_type( sym->type );
-          }
+     for ( size_t i = 0; i < buff_len(global_sym_list); i++ ){
+          Sym *it = global_sym_list[i];
+          resolve_sym( it );
+     /*     if ( it->kind == SYM_FUNC ){
+               resolve_func(it);
+          }*/
+          complete_type( it->type );
      }
 }
 

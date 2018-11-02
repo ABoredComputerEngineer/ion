@@ -7,12 +7,20 @@ bool use_gen_buff = false;
 #define printf(...) ( (use_gen_buff)?(void)buff_printf(gen_buff,__VA_ARGS__):(void)printf(__VA_ARGS__))
 
 //Indentation handling
+size_t gen_line = 0;
 
-#ifdef new_line
-     #undef new_line
-#endif
+void print_nl(void){
+     printf("\n%.*s",indent,"\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t");
+     gen_line++;
+}
 
-#define new_line printf("\n%.*s",indent,"\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t")
+void gen_pos( SrcLoc pos){
+     if ( gen_line != pos.line ){
+          printf("#line %zu",pos.line);
+          print_nl();
+          gen_line = pos.line;
+     }
+}
 extern int indent;
 extern Sym **global_sym_list ;
 extern Sym **ordered_syms ;
@@ -28,9 +36,6 @@ char *bprintf( const char *fmt,... ){
      va_end(args);
      return dest;
 }
-
-
-
 
 
 void gen_expr(Expr *expr){
@@ -101,7 +106,7 @@ void gen_expr(Expr *expr){
                if ( expr->compound_expr.resolved_type->kind  != TYPE_ARRAY ){
                     printf("(%s){",type_to_cdecl(expr->compound_expr.resolved_type,""));
                } else {
-                    printf("{%s",type_to_cdecl(expr->compound_expr.resolved_type,""));
+                    printf("{");
                }
                for ( CompoundField *it = expr->compound_expr.fields;\
                          it != expr->compound_expr.fields + expr->compound_expr.num_args;\
@@ -139,7 +144,7 @@ void gen_expr(Expr *expr){
 
 }
 
-#define paren_str(s,x) ( ( *s )?"("#x")":#x)
+#define paren_str(s,x) ( ( s && *s )?"("#x")":#x)
 char *type_to_cdecl( Type *type , char *str ){
      switch ( type->kind ){
           case TYPE_INT:
@@ -190,24 +195,56 @@ void gen_code_var(Sym *sym){
      printf("%s",need_semi_colon?";":"");
 }
 
-char *gen_code_type(Sym *sym){
+void gen_code_typedef(Sym *sym){
+     Decl *decl = sym->decl;
+     Type *type = sym->type;
+     printf("typedef ");     
+     if ( type->kind == TYPE_ARRAY ){
+          printf("%s %s[%ld];",\
+                    type_to_cdecl(type->array.base_type,NULL),\
+                    sym->name,\
+                    type->array.size);
+     } else if ( type->kind == TYPE_STRUCT ){
+          printf("struct %s %s;",type->sym->name, decl->name );
+     } else if ( type->kind == TYPE_UNION ){
+          printf("union %s %s;",type->sym->name, decl->name );
+     } else if ( type->kind == TYPE_PTR ){
+          int dref = 0;
+          while ( type->kind == TYPE_PTR ){
+               dref++;
+               type = type->array.base_type;
+          }
+          printf("%s%.*s %s;",type_to_cdecl(type,""),\
+                    dref,\
+                    "****************************",\
+                    sym->name);
+     } else {
+          printf("%s %s;",type_to_cdecl(type,NULL),sym->name );
+     }
+}
+
+void gen_code_type(Sym *sym){
      assert(sym->kind == SYM_TYPE );
      Type *type = sym->type;
      Decl *decl = sym->decl;
      if ( decl->kind == DECL_STRUCT || decl->kind == DECL_UNION ){
           assert( type->kind == TYPE_STRUCT || type->kind == TYPE_UNION );
-          char *result = NULL;
-          result = bprintf("%s %s {\n",type->kind == TYPE_UNION?"union":"struct",sym->name); 
+          printf("%s %s {",type->kind == TYPE_UNION?"union":"struct",sym->name); 
+          indent++;
           for ( size_t i = 0 ; i < type->aggregate.num_fields; i++ ){
+               print_nl();
                TypeField it = type->aggregate.fields[i];
-               result = bprintf("%s\t%s;\n",result,type_to_cdecl(it.type,(char *)it.name));
+               printf("%s;",type_to_cdecl(it.type,(char *)it.name));
           }
-          result = bprintf("%s};",result);
-          return result;
+          indent--;
+          print_nl();
+          printf("};");
+          print_nl();
      } else if ( decl->kind == DECL_TYPEDEF){
-          return bprintf("typedef %s %s;",type_to_cdecl(type,""),decl->name); 
+          gen_code_typedef( sym );
+//          printf("typedef %s %s;",type_to_cdecl(type,""),decl->name); 
+          print_nl();
      }
-     return NULL;
 }
 
 
@@ -229,7 +266,8 @@ char *gen_func_decl(Sym *sym){
 
 #define semi_colon(x) ( (x)?";":"" )
 void gen_stmt(Stmt *stmt){
-     extern char *gen_stmt_block(StmtBlock);
+     extern void gen_stmt_block(StmtBlock);
+     gen_pos(stmt->location);
      switch ( stmt->kind ){
           case STMT_INIT:{
                Sym *sym = stmt->init_stmt.sym;
@@ -280,14 +318,14 @@ void gen_stmt(Stmt *stmt){
           case STMT_IF:{
                printf("if ( ");
                gen_expr(stmt->if_stmt.cond);
-               printf(")");
+               printf(" )");
                gen_stmt_block(stmt->if_stmt.if_block);
                for ( Elseif *it = stmt->if_stmt.elseifs;\
                          it != stmt->if_stmt.elseifs + stmt->if_stmt.num_elseifs;\
                          it++){
                     printf(" else if ( ");
                     gen_expr(it->cond);
-                    printf(")");
+                    printf(" )");
                     gen_stmt_block(it->elseif_block);
                }
                if ( stmt->if_stmt.else_block.num_stmts != 0 ){
@@ -299,15 +337,14 @@ void gen_stmt(Stmt *stmt){
           case STMT_SWITCH:{
                printf("switch ( ");
                gen_expr(stmt->switch_stmt.expr);
-               printf("){");
+               printf(" ){");
                indent++;
-               new_line;
                for ( size_t i = 0; i < stmt->switch_stmt.num_cases; i++ ){
+                    print_nl();
                     Case it= stmt->switch_stmt.cases[i];
                     if ( it.isdefault ){
                          printf("default :");
                          gen_stmt_block(it.case_block);
-                         new_line;
                     }else {
                          for ( Expr **it1 = it.expr_list;\
                                    it1 != it.expr_list + it.num_expr;\
@@ -319,12 +356,10 @@ void gen_stmt(Stmt *stmt){
                          if ( it.case_block.num_stmts != 0 ){
                               gen_stmt_block(it.case_block);
                          }
-                         new_line;
-                         
                     }
                }
                indent--;
-               new_line;
+               print_nl();
                printf("}");
                break;
           }
@@ -352,25 +387,20 @@ void gen_stmt(Stmt *stmt){
      }
 }
 #undef semi_colon
-char *gen_stmt_block(StmtBlock block){
+void gen_stmt_block(StmtBlock block){
      printf("{");
      indent++;
-     new_line;
-     char *result = NULL;
      for ( size_t i = 0; i < block.num_stmts; i++ ){
+          print_nl();
           gen_stmt(block.stmts[i]);
-          if ( i != block.num_stmts - 1 )
-               new_line;
      }
      indent--;
-     new_line;
+     print_nl();
      printf("}");
-     return  result;
 }
 
 void gen_code_func(Sym *sym){
      Decl *decl = sym->decl;
-     //char *result = NULL;
      printf("%s", gen_func_decl(sym));
      gen_stmt_block(decl->func_decl.block); 
      printf("\n");
@@ -381,17 +411,17 @@ void gen_code_const(Sym *sym){
      assert( decl->kind == DECL_CONST );
      printf("enum {");
      indent++;
-     new_line;
+     print_nl();
      printf("%s",decl->name );
      if ( decl->const_decl.expr ){
           printf(" = %ld",sym->val);
      }
      indent--;
-     new_line;
+     print_nl();
      printf("};");
-     new_line;
+     print_nl();
 }
-char *gen_code(Sym *sym){
+void gen_code(Sym *sym){
      switch ( sym->kind ){
           case SYM_VAR:{
                gen_code_var(sym);
@@ -399,19 +429,19 @@ char *gen_code(Sym *sym){
                break;
           }
           case SYM_TYPE:
-               return gen_code_type(sym);
+               gen_code_type(sym);
                break;
           case SYM_CONST:
                gen_code_const(sym); 
                break;
           case SYM_FUNC:
+               gen_pos(sym->decl->location);
                gen_code_func(sym);
                break;
           default:
                fatal("Unknown symbol type!\n");
                break;
      }
-     return NULL;
 }
 /*
 void type_gen_test(void){
@@ -438,7 +468,7 @@ void gen_forward_decls( void ){
      for( Sym **it = ordered_syms; it != buff_end(ordered_syms); it++ ){
           if ( (*it)->kind == SYM_TYPE ){
                Type *t= (*it)->type;
-               if ( t != type_int && t!= type_float && t != type_void ){
+               if ( t != type_int && t!= type_float && t != type_void && !t->is_typedef ){
                     if ( t->kind == TYPE_STRUCT ){
                          printf("typedef struct %s %s;\n",(*it)->name,(*it)->name);
                     } else if ( t->kind == TYPE_UNION ){

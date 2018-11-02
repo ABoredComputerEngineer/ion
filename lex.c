@@ -149,25 +149,10 @@ void init_intern_keyword(void){
      first_keyword = typedef_keyword;
      last_keyword = sizeof_keyword;
      assert(first_keyword < last_keyword );
-  //_keyword  = str_intern(#name); buff_push(keywords,name##_keyword) 
-  //_keyword  = str_intern(#name); buff_push(keywords,name##_keyword) 
-  //   keyword_intern("default");
-  //   keyword_intern("while");
-  //   keyword_intern("for");
-  //   keyword_intern("do");
-  //   keyword_intern("return");
-  //   keyword_intern("break");
-  //   keyword_intern("continue");
-  //   keyword_intern("sizeof");
      init++;
 }
 
 bool is_token_keyword(const char *key ){
-  //   for ( const char **it = keywords; it != keywords + buff_len(keywords); it++ ){
-  //        if ( strcmp(key,*it )  == 0 )
-  //             return true;
-  //   }
-  //   return false;
      return ( key >= first_keyword && key <= last_keyword );
 }
 
@@ -665,27 +650,6 @@ bool is_decl_keyword(){
      return ( token.kind == TOKEN_KEYWORD && (token.name>=typedef_keyword && token.name <= union_keyword) );
 }
 
-//char *token_kind_name(TokenKind kind){
-//     static char err[100];
-//
-//     switch ( kind ) {
-//          case TOKEN_INT:
-//               sprintf(err,"int");
-//               break;
-//          case TOKEN_NAME:
-//               sprintf(err,"name");
-//               break;
-//          default:
-//               if ( token.kind < 128 && isprint(token.kind) )
-//                    sprintf(err,"%c",token.kind);  // print the character if it is printable
-//               else
-//                    sprintf(err,"%d",token.kind);  // print the ascii value if it is not printable
-//               break;
-//     }
-//     return err;
-//    
-//}
-//
 
 
 #define case1(cond,rv)\

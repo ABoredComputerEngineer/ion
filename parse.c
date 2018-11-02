@@ -130,7 +130,6 @@ Expr *parse_expr_base(){
                match_token(TOKEN_COMMA);
                buff_push(expr_list,parse_expr());
           }
-     //     Expr **expr_list = parse_expr_list(); 
           expect_token(TOKEN_RPAREN);
           Expr **ast_expr_list = ast_dup(expr_list,buff_sizeof(expr_list));
           size_t len = buff_len(expr_list);
@@ -282,10 +281,8 @@ TypeSpec *parse_type(){
                Expr *expr = NULL;
                if ( !is_token(TOKEN_RBRACKET )){
                     expr = parse_expr();
-                    type = typespec_array(type,expr);
-               } else {
-                    type = typespec_pointer(type);
                }
+               type = typespec_array(type,expr);
                expect_token(TOKEN_RBRACKET);
           }
      }
@@ -464,10 +461,6 @@ Decl *parse_decl(){
 
 
 StmtBlock parse_stmt_block(){
-     
-     //Stmt **stmt1 = stmt_list(3,stmt_break(),stmt_expr(expr_name("i")),stmt_while(expr_binary(EQ,expr_name("ab"),expr_int(1)),new_block(1,stmt_list(1,stmt_continue()))));
-     //
-     //StmtBlock block_test1 = new_block(3,stmt1 );
      StmtBlock block = {0}; 
      Stmt **stmt_list = NULL;
      expect_token(TOKEN_LBRACE);
@@ -516,7 +509,6 @@ Case parse_switch_case(){
 }
 Stmt *parse_stmt_switch(){
      expect_token(TOKEN_LPAREN);
-     //parse expr
      Expr *expr = parse_expr();
      expect_token(TOKEN_RPAREN);
      expect_token(TOKEN_LBRACE);
@@ -637,34 +629,37 @@ Stmt *parse_return_stmt(){
 }
 
 Stmt *parse_stmt(){
+     SrcLoc loc = { .fname = NULL, .line = token.line_number };
+     Stmt *new = NULL;
      if ( match_keyword(return_keyword) ){
-          return parse_return_stmt();
+          new = parse_return_stmt();
      } else if ( match_keyword(if_keyword) ){
-          return parse_stmt_if();
+          new =  parse_stmt_if();
      } else if ( match_keyword(while_keyword) ){
-          return parse_stmt_while();
+          new = parse_stmt_while();
      } else if ( match_keyword(for_keyword) ){
-          return parse_stmt_for();
+          new = parse_stmt_for();
      } else if ( match_keyword(do_keyword) ){
-          return parse_stmt_do_while();
+          new= parse_stmt_do_while();
      } else if ( match_keyword(switch_keyword) ){
-          return parse_stmt_switch();
+          new = parse_stmt_switch();
      } else if ( match_keyword(break_keyword) ){
           expect_token(TOKEN_SEMICOLON);
-          return stmt_break();
+          new = stmt_break();
      } else if ( match_keyword(continue_keyword) ){
           expect_token(TOKEN_SEMICOLON);
-          return stmt_continue();
+          new = stmt_continue();
      } else if ( is_decl_keyword() ){
           Decl *decl = parse_decl();
           //expect_token(TOKEN_SEMICOLON);
-          return stmt_decl(decl);
+          new = stmt_decl(decl);
      } else {
           // parse expr
-          Stmt *new = parse_stmt_simple();
+          new = parse_stmt_simple();
           expect_token(TOKEN_SEMICOLON); 
-          return new;
      }
+     new->location = loc;
+     return new;
 }
 
 

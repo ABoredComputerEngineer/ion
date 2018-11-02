@@ -19,21 +19,10 @@ bool ion_compile_file(const char *path){
      for ( size_t i = 0 ; i < decls->num_decls ; i++ ){
           sym_add_decl( decls->decl_list[i]);
      }
-/*    for ( Sym **it = global_sym_list; it != buff_end(global_sym_list); it++ ){
-          resolve_sym(*it);
-          if ( (*it)->kind == SYM_FUNC ){
-               resolve_func(*it);
-          }
-          complete_type((*it)->type);
-     }
-     */
      finalize_syms();
      gen_forward_decls();
-     char *tmp = NULL;
      for( Sym **it = ordered_syms; it != buff_end(ordered_syms); it++ ){
-          tmp = gen_code(*it);
-          if ( tmp )
-               printf("%s\n",tmp);          
+          gen_code(*it);
      }
 
     export_to_c(path,gen_buff,strlen(gen_buff));
